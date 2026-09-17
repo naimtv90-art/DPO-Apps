@@ -65,7 +65,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [activeView, setActiveView] = useState<NavView>('dashboard');
   const [user, setUser] = useState<User | null>(() => {
     const savedUser = localStorage.getItem('dpo_user');
-    return savedUser ? JSON.parse(savedUser) : { id: 1, username: 'demo', name: 'Dairy Pure Admin', role: 'admin' };
+    return savedUser ? JSON.parse(savedUser) : null;
   });
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
   const [toasts, setToasts] = useState<ToastItem[]>([]);

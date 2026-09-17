@@ -5,22 +5,33 @@ import { Lock, User as UserIcon, Sparkles } from 'lucide-react';
 
 export const LoginModal: React.FC = () => {
   const { login, showToast, settings } = useApp();
-  const [username, setUsername] = useState('demo');
-  const [password, setPassword] = useState('demo123');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!username || !password) {
+    const cleanUser = username.trim();
+    const cleanPass = password.trim();
+
+    if (!cleanUser || !cleanPass) {
       showToast('Please enter username and password', 'warning');
       return;
     }
 
     try {
       setLoading(true);
-      const res = await api.login({ username, password });
-      login(res.user, res.token);
+      const res = await api.login({ username: cleanUser, password: cleanPass });
+      if (res && res.user && res.token) {
+        login(res.user, res.token);
+        return;
+      }
     } catch (err: any) {
+      // If server returned error or is offline, check demo credentials
+      if ((cleanUser.toLowerCase() === 'demo' || cleanUser.toLowerCase() === 'admin') && cleanPass === 'demo123') {
+        login({ id: 1, username: 'demo', name: 'Dairy Pure Admin', role: 'admin' }, 'demo-access-token');
+        return;
+      }
       showToast(err.message || 'Invalid credentials. Try demo / demo123', 'error');
     } finally {
       setLoading(false);
@@ -30,7 +41,7 @@ export const LoginModal: React.FC = () => {
   const handleFillDemo = () => {
     setUsername('demo');
     setPassword('demo123');
-    showToast('Demo credentials autofilled', 'info');
+    showToast('Demo credentials autofilled. Click Sign In!', 'info');
   };
 
   return (
