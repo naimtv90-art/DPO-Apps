@@ -239,73 +239,15 @@ export async function initDatabase() {
     }
   }
 
-  // Check if purchases table needs initial seeding
-  const pCheck = await query('SELECT COUNT(*) as count FROM milk_purchases');
-  if (parseInt(pCheck.rows[0].count, 10) === 0) {
-    await seedInitialData();
+  // Ensure default base rate exists if empty
+  const rateCheck = await query('SELECT COUNT(*) as count FROM milk_rates');
+  if (parseInt(rateCheck.rows[0].count, 10) === 0) {
+    await query(
+      'INSERT INTO milk_rates (date, purchase_rate, selling_rate, unit, notes) VALUES (?, ?, ?, ?, ?)',
+      [new Date().toISOString().substring(0, 10), 60.0, 85.0, 'Liter', 'Base standard rates']
+    );
   }
-}
-
-async function seedInitialData() {
-  // Insert suppliers
-  await query('INSERT INTO suppliers (name, phone, address, notes) VALUES (?, ?, ?, ?)', ['Kadir Dairy Farm', '01711223344', 'Savar, Dhaka', 'Primary wholesale cow milk supplier']);
-  await query('INSERT INTO suppliers (name, phone, address, notes) VALUES (?, ?, ?, ?)', ['Rahim Molla Dairy', '01822334455', 'Singair, Manikganj', 'Direct farm pure morning milk']);
-  await query('INSERT INTO suppliers (name, phone, address, notes) VALUES (?, ?, ?, ?)', ['Haji Organic Dairy', '01933445566', 'Gazipur Sadar', 'Grass-fed cow milk']);
-  await query('INSERT INTO suppliers (name, phone, address, notes) VALUES (?, ?, ?, ?)', ['Bogra Local Cooperative', '01644556677', 'Bogra', 'High fat evening delivery']);
-
-  // Insert customers
-  await query('INSERT INTO customers (name, phone, address, customer_type, notes) VALUES (?, ?, ?, ?, ?)', ['Mirpur DOHS Club', '01710998877', 'House 45, Road 2, Mirpur DOHS', 'Wholesale', 'Daily morning 25L delivery']);
-  await query('INSERT INTO customers (name, phone, address, customer_type, notes) VALUES (?, ?, ?, ?, ?)', ['Pallabi Sweet Meat & Cafe', '01812345678', 'Plot 12, Main Road, Pallabi', 'Restaurant', 'Commercial daily supply']);
-  await query('INSERT INTO customers (name, phone, address, customer_type, notes) VALUES (?, ?, ?, ?, ?)', ['Rafiqul Islam (Gold Member)', '01923456789', 'Avenue 5, Block B, Mirpur 12', 'Regular Customer', 'DPO Lifetime Member card #042']);
-  await query('INSERT INTO customers (name, phone, address, customer_type, notes) VALUES (?, ?, ?, ?, ?)', ['Nazmul Hasan', '01634567890', 'House 14, Road 8, Rupnagar R/A', 'Retail', 'Weekly family purchase']);
-  await query('INSERT INTO customers (name, phone, address, customer_type, notes) VALUES (?, ?, ?, ?, ?)', ['Eastern Housing Resident Forum', '01745678901', 'Eastern Housing Phase 2, Pallabi', 'Regular Customer', 'Morning bulk delivery']);
-
-  // Insert rates
-  await query('INSERT INTO milk_rates (date, purchase_rate, selling_rate, unit, notes) VALUES (?, ?, ?, ?, ?)', ['2026-09-01', 60.0, 85.0, 'Liter', 'September standard base rates']);
-  await query('INSERT INTO milk_rates (date, purchase_rate, selling_rate, unit, notes) VALUES (?, ?, ?, ?, ?)', ['2026-09-08', 61.0, 85.0, 'Liter', 'Adjusted purchase rate for fuel transport']);
-  await query('INSERT INTO milk_rates (date, purchase_rate, selling_rate, unit, notes) VALUES (?, ?, ?, ?, ?)', ['2026-09-14', 62.0, 88.0, 'Liter', 'Current market rate update']);
-
-  // Sample transactions
-  const sampleDays = [
-    { date: '2026-09-01', pQty: 120, pRate: 60, sQty: 100, sRate: 85, sup: 'Kadir Dairy Farm', supPh: '01711223344', cust: 'Mirpur DOHS Club', custPh: '01710998877' },
-    { date: '2026-09-02', pQty: 110, pRate: 60, sQty: 95, sRate: 85, sup: 'Rahim Molla Dairy', supPh: '01822334455', cust: 'Pallabi Sweet Meat & Cafe', custPh: '01812345678' },
-    { date: '2026-09-03', pQty: 130, pRate: 60, sQty: 110, sRate: 85, sup: 'Kadir Dairy Farm', supPh: '01711223344', cust: 'Rafiqul Islam (Gold Member)', custPh: '01923456789' },
-    { date: '2026-09-04', pQty: 125, pRate: 60, sQty: 105, sRate: 85, sup: 'Haji Organic Dairy', supPh: '01933445566', cust: 'Mirpur DOHS Club', custPh: '01710998877' },
-    { date: '2026-09-05', pQty: 140, pRate: 60, sQty: 120, sRate: 85, sup: 'Kadir Dairy Farm', supPh: '01711223344', cust: 'Nazmul Hasan', custPh: '01634567890' },
-    { date: '2026-09-06', pQty: 115, pRate: 60, sQty: 90, sRate: 85, sup: 'Rahim Molla Dairy', supPh: '01822334455', cust: 'Eastern Housing Resident Forum', custPh: '01745678901' },
-    { date: '2026-09-07', pQty: 135, pRate: 60, sQty: 115, sRate: 85, sup: 'Bogra Local Cooperative', supPh: '01644556677', cust: 'Pallabi Sweet Meat & Cafe', custPh: '01812345678' },
-    { date: '2026-09-08', pQty: 120, pRate: 61, sQty: 100, sRate: 85, sup: 'Kadir Dairy Farm', supPh: '01711223344', cust: 'Mirpur DOHS Club', custPh: '01710998877' },
-    { date: '2026-09-09', pQty: 125, pRate: 61, sQty: 105, sRate: 85, sup: 'Rahim Molla Dairy', supPh: '01822334455', cust: 'Rafiqul Islam (Gold Member)', custPh: '01923456789' },
-    { date: '2026-09-10', pQty: 130, pRate: 61, sQty: 110, sRate: 85, sup: 'Haji Organic Dairy', supPh: '01933445566', cust: 'Eastern Housing Resident Forum', custPh: '01745678901' },
-    { date: '2026-09-11', pQty: 140, pRate: 61, sQty: 125, sRate: 85, sup: 'Kadir Dairy Farm', supPh: '01711223344', cust: 'Pallabi Sweet Meat & Cafe', custPh: '01812345678' },
-    { date: '2026-09-12', pQty: 110, pRate: 61, sQty: 95, sRate: 85, sup: 'Rahim Molla Dairy', supPh: '01822334455', cust: 'Nazmul Hasan', custPh: '01634567890' },
-    { date: '2026-09-13', pQty: 125, pRate: 61, sQty: 100, sRate: 85, sup: 'Bogra Local Cooperative', supPh: '01644556677', cust: 'Mirpur DOHS Club', custPh: '01710998877' },
-    { date: '2026-09-14', pQty: 135, pRate: 62, sQty: 110, sRate: 88, sup: 'Kadir Dairy Farm', supPh: '01711223344', cust: 'Rafiqul Islam (Gold Member)', custPh: '01923456789' },
-    { date: '2026-09-15', pQty: 130, pRate: 62, sQty: 105, sRate: 88, sup: 'Haji Organic Dairy', supPh: '01933445566', cust: 'Eastern Housing Resident Forum', custPh: '01745678901' },
-    { date: '2026-09-16', pQty: 145, pRate: 62, sQty: 120, sRate: 88, sup: 'Rahim Molla Dairy', supPh: '01822334455', cust: 'Pallabi Sweet Meat & Cafe', custPh: '01812345678' },
-    { date: '2026-09-17', pQty: 125, pRate: 62, sQty: 100, sRate: 88, sup: 'Kadir Dairy Farm', supPh: '01711223344', cust: 'Mirpur DOHS Club', custPh: '01710998877' }
-  ];
-
-  for (const day of sampleDays) {
-    await query(`
-      INSERT INTO milk_purchases (date, supplier_name, quantity, unit, purchase_rate, total_cost, supplier_phone, supplier_address, notes)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [day.date, day.sup, day.pQty, 'Liter', day.pRate, day.pQty * day.pRate, day.supPh, 'Farm Collection Point', 'Fresh morning milking batch']);
-
-    await query(`
-      INSERT INTO milk_sales (date, customer_name, quantity, unit, selling_rate, total_sale, customer_phone, customer_address, payment_status, notes)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [day.date, day.cust, day.sQty, 'Liter', day.sRate, day.sQty * day.sRate, day.custPh, 'Home delivery direct', 'Paid', 'Delivered in sanitized chilled milk cans']);
-  }
-
-  // Insert expenses
-  await query('INSERT INTO expenses (date, name, category, amount, notes) VALUES (?, ?, ?, ?, ?)', ['2026-09-02', 'Delivery Van Fuel', 'Transport', 850, 'Mirpur & Pallabi morning delivery route']);
-  await query('INSERT INTO expenses (date, name, category, amount, notes) VALUES (?, ?, ?, ?, ?)', ['2026-09-05', 'Chilling Unit Electricity', 'Electricity', 2400, 'Cold room power bill - Sept 1st week']);
-  await query('INSERT INTO expenses (date, name, category, amount, notes) VALUES (?, ?, ?, ?, ?)', ['2026-09-07', 'Sanitary Food-Grade Milk Pouches', 'Packaging', 1200, '500ml & 1L pouch rolls']);
-  await query('INSERT INTO expenses (date, name, category, amount, notes) VALUES (?, ?, ?, ?, ?)', ['2026-09-10', 'Milk Delivery Staff Salary Part', 'Employee', 4500, 'Bi-weekly advance payout']);
-  await query('INSERT INTO expenses (date, name, category, amount, notes) VALUES (?, ?, ?, ?, ?)', ['2026-09-12', 'Shop & Hub Rental Advance', 'Shop Rent', 6000, 'Mirpur 12 distribution hub']);
-  await query('INSERT INTO expenses (date, name, category, amount, notes) VALUES (?, ?, ?, ?, ?)', ['2026-09-14', 'Lactometer & Chiller Calibration', 'Maintenance', 750, 'Quality checking tool calibration']);
-  await query('INSERT INTO expenses (date, name, category, amount, notes) VALUES (?, ?, ?, ?, ?)', ['2026-09-17', 'Daily Transport & Ice Bags', 'Transport', 500, 'Insulated boxes ice replenishment']);
 }
 
 export default { query, executeTransaction, initDatabase };
+
