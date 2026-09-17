@@ -236,48 +236,46 @@ app.get('/api/dashboard/stats', async (req, res) => {
     const monthGrossProfit = monthSales.revenue - monthCOGS;
     const monthNetProfit = monthGrossProfit - monthExpenses.total;
 
-    // Chart history
-    const chartHistoryRes = await query(`
-      WITH all_dates AS (
-        SELECT DISTINCT date FROM milk_purchases
-        UNION
-        SELECT DISTINCT date FROM milk_sales
-        UNION
-        SELECT DISTINCT date FROM expenses
-      )
-      SELECT 
-        d.date,
-        COALESCE((SELECT SUM(quantity) FROM milk_purchases WHERE date = d.date), 0) as purchase_qty,
-        COALESCE((SELECT SUM(total_cost) FROM milk_purchases WHERE date = d.date), 0) as purchase_cost,
-        COALESCE((SELECT SUM(quantity) FROM milk_sales WHERE date = d.date), 0) as sales_qty,
-        COALESCE((SELECT SUM(total_sale) FROM milk_sales WHERE date = d.date), 0) as sales_revenue,
-        COALESCE((SELECT SUM(amount) FROM expenses WHERE date = d.date), 0) as expenses
-      FROM all_dates d
-      ORDER BY d.date ASC
-    `);
+    // Chart history (Robust in-memory aggregation)
+    let formattedCharts = [];
+    try {
+      const allPurchases = await query('SELECT CAST(date AS TEXT) as date, quantity, total_cost FROM milk_purchases');
+      const allSales = await query('SELECT CAST(date AS TEXT) as date, quantity, total_sale FROM milk_sales');
+      const allExpenses = await query('SELECT CAST(date AS TEXT) as date, amount FROM expenses');
 
-    const formattedCharts = chartHistoryRes.rows.map(row => {
-      const pQty = parseFloat(row.purchase_qty) || 0;
-      const pCost = parseFloat(row.purchase_cost) || 0;
-      const sQty = parseFloat(row.sales_qty) || 0;
-      const sRev = parseFloat(row.sales_revenue) || 0;
-      const exp = parseFloat(row.expenses) || 0;
-      const cogs = sQty * metrics.weightedAvgCost;
-      const grossProfit = sRev - cogs;
-      const netProfit = grossProfit - exp;
+      const dateMap = {};
+      for (const p of allPurchases.rows) {
+        const d = String(p.date).substring(0, 10);
+        if (!dateMap[d]) dateMap[d] = { date: d, purchaseQty: 0, purchaseCost: 0, salesQty: 0, salesRevenue: 0, expenses: 0 };
+        dateMap[d].purchaseQty += parseFloat(p.quantity) || 0;
+        dateMap[d].purchaseCost += parseFloat(p.total_cost) || 0;
+      }
+      for (const s of allSales.rows) {
+        const d = String(s.date).substring(0, 10);
+        if (!dateMap[d]) dateMap[d] = { date: d, purchaseQty: 0, purchaseCost: 0, salesQty: 0, salesRevenue: 0, expenses: 0 };
+        dateMap[d].salesQty += parseFloat(s.quantity) || 0;
+        dateMap[d].salesRevenue += parseFloat(s.total_sale) || 0;
+      }
+      for (const e of allExpenses.rows) {
+        const d = String(e.date).substring(0, 10);
+        if (!dateMap[d]) dateMap[d] = { date: d, purchaseQty: 0, purchaseCost: 0, salesQty: 0, salesRevenue: 0, expenses: 0 };
+        dateMap[d].expenses += parseFloat(e.amount) || 0;
+      }
 
-      return {
-        date: typeof row.date === 'string' ? row.date.substring(0, 10) : new Date(row.date).toISOString().substring(0, 10),
-        purchaseQty: pQty,
-        purchaseCost: pCost,
-        salesQty: sQty,
-        salesRevenue: sRev,
-        expenses: exp,
-        grossProfit: Math.round(grossProfit),
-        netProfit: Math.round(netProfit),
-        cogs: Math.round(cogs),
-      };
-    });
+      formattedCharts = Object.values(dateMap).sort((a, b) => a.date.localeCompare(b.date)).map(row => {
+        const cogs = row.salesQty * metrics.weightedAvgCost;
+        const grossProfit = row.salesRevenue - cogs;
+        const netProfit = grossProfit - row.expenses;
+        return {
+          ...row,
+          grossProfit: Math.round(grossProfit),
+          netProfit: Math.round(netProfit),
+          cogs: Math.round(cogs)
+        };
+      });
+    } catch (chartErr) {
+      console.warn('Chart mapping warning:', chartErr);
+    }
 
     const recentPurchasesRes = await query('SELECT * FROM milk_purchases ORDER BY date DESC, id DESC LIMIT 5');
     const recentSalesRes = await query('SELECT * FROM milk_sales ORDER BY date DESC, id DESC LIMIT 5');
