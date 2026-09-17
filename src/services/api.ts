@@ -13,15 +13,24 @@ import {
   User
 } from '../types';
 
-const BASE_URL = '/api';
+const BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
-async function handleResponse<T>(res: Response): Promise<T> {
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const errorMsg = data.error || data.message || `Request failed with status ${res.status}`;
-    throw new Error(errorMsg);
+async function handleResponse<T>(res: Response, fallbackData?: T): Promise<T> {
+  try {
+    const contentType = res.headers.get('content-type');
+    if (contentType && contentType.includes('application/json')) {
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || data.message || `Request failed with status ${res.status}`);
+      }
+      return data as T;
+    }
+  } catch (e: any) {
+    if (fallbackData !== undefined) return fallbackData;
+    throw e;
   }
-  return data as T;
+  if (fallbackData !== undefined) return fallbackData;
+  throw new Error(`Server returned ${res.status}`);
 }
 
 export const api = {

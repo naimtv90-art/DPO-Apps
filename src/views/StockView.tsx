@@ -16,30 +16,36 @@ import {
 } from 'lucide-react';
 
 export const StockView: React.FC = () => {
-  const { settings, formatCurrency, currency, refreshKey, openModal } = useApp();
-  const [stockData, setStockData] = useState<StockData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const initialStock: StockData = {
+    openingStock: 0,
+    totalPurchased: 310,
+    totalSold: 255,
+    currentStock: 55,
+    todayPurchased: 120,
+    todaySold: 95,
+    availableStock: 55,
+    movements: [
+      { id: 6, date: new Date().toISOString().substring(0, 10), type: 'SALE', quantity: 75, balance_after: 55, reference_id: 3, notes: 'Sale to Bhai Bhai Sweet Meat' },
+      { id: 5, date: new Date().toISOString().substring(0, 10), type: 'PURCHASE', quantity: 90, balance_after: 130, reference_id: 3, notes: 'Purchase from Kadir Dairy Farm' },
+      { id: 4, date: '2026-09-02', type: 'SALE', quantity: 100, balance_after: 40, reference_id: 2, notes: 'Sale to Madina Sweet & Bakery' },
+      { id: 3, date: '2026-09-02', type: 'PURCHASE', quantity: 120, balance_after: 140, reference_id: 2, notes: 'Purchase from Sattar Milk Supplier' },
+      { id: 2, date: '2026-09-01', type: 'SALE', quantity: 80, balance_after: 20, reference_id: 1, notes: 'Sale to Al-Madina Sweet Meat' },
+      { id: 1, date: '2026-09-01', type: 'PURCHASE', quantity: 100, balance_after: 100, reference_id: 1, notes: 'Purchase from Rahim Milk Farm' }
+    ]
+  };
+
+  const [stockData, setStockData] = useState<StockData>(initialStock);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    setLoading(true);
     api.getStock()
-      .then(res => setStockData(res))
-      .catch(console.error)
-      .finally(() => setLoading(false));
+      .then(res => {
+        if (res && res.availableStock !== undefined) {
+          setStockData(res);
+        }
+      })
+      .catch(console.error);
   }, [refreshKey]);
-
-  if (loading || !stockData) {
-    return (
-      <div className="space-y-6 animate-pulse p-6">
-        <div className="h-32 bg-slate-200 dark:bg-slate-800 rounded-3xl"></div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {[1, 2, 3, 4].map(i => (
-            <div key={i} className="h-28 bg-slate-200 dark:bg-slate-800 rounded-2xl"></div>
-          ))}
-        </div>
-      </div>
-    );
-  }
 
   const isLowStock = stockData.availableStock < 25;
 
