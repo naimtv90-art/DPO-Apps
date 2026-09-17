@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { api } from '../../services/api';
-import { Lock, User as UserIcon, Sparkles } from 'lucide-react';
+import { Lock, User as UserIcon } from 'lucide-react';
 
 export const LoginModal: React.FC = () => {
   const { login, showToast, settings } = useApp();
@@ -32,16 +32,10 @@ export const LoginModal: React.FC = () => {
         login({ id: 1, username: 'demo', name: 'Dairy Pure Admin', role: 'admin' }, 'demo-access-token');
         return;
       }
-      showToast(err.message || 'Invalid credentials. Try demo / demo123', 'error');
+      showToast(err.message || 'Invalid credentials. Please try again', 'error');
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleFillDemo = () => {
-    setUsername('demo');
-    setPassword('demo123');
-    showToast('Demo credentials autofilled. Click Sign In!', 'info');
   };
 
   return (
@@ -61,23 +55,6 @@ export const LoginModal: React.FC = () => {
           </h2>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
             Milk Purchase & Sales Operations Management
-          </p>
-        </div>
-
-        {/* Demo credentials hint box */}
-        <div 
-          onClick={handleFillDemo}
-          className="mb-6 p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 cursor-pointer hover:bg-emerald-100/70 dark:hover:bg-emerald-900/40 transition group"
-        >
-          <div className="flex items-center justify-between text-xs font-semibold text-emerald-800 dark:text-emerald-300">
-            <div className="flex items-center gap-1.5">
-              <Sparkles className="w-4 h-4 text-emerald-600 animate-pulse" />
-              <span>Demo Account Credentials</span>
-            </div>
-            <span className="text-[10px] bg-emerald-200/60 dark:bg-emerald-800 px-2 py-0.5 rounded-full font-bold">1-Click Login</span>
-          </div>
-          <p className="text-xs text-slate-600 dark:text-slate-400 mt-1.5 font-mono">
-            Username: <strong className="text-emerald-700 dark:text-emerald-400">demo</strong> | Password: <strong className="text-emerald-700 dark:text-emerald-400">demo123</strong>
           </p>
         </div>
 
