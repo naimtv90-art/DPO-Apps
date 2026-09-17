@@ -156,8 +156,8 @@ app.get('/api/dashboard/stats', async (req, res) => {
         COALESCE(SUM(total_cost), 0) as cost,
         COUNT(*) as count
       FROM milk_purchases 
-      WHERE date = ?
-    `, [today]);
+      WHERE CAST(date AS TEXT) LIKE ?
+    `, [`${today}%`]);
 
     // Today's sales
     const todaySalesRes = await query(`
@@ -166,15 +166,15 @@ app.get('/api/dashboard/stats', async (req, res) => {
         COALESCE(SUM(total_sale), 0) as revenue,
         COUNT(*) as count
       FROM milk_sales 
-      WHERE date = ?
-    `, [today]);
+      WHERE CAST(date AS TEXT) LIKE ?
+    `, [`${today}%`]);
 
     // Today's expenses
     const todayExpensesRes = await query(`
       SELECT COALESCE(SUM(amount), 0) as total
       FROM expenses 
-      WHERE date = ?
-    `, [today]);
+      WHERE CAST(date AS TEXT) LIKE ?
+    `, [`${today}%`]);
 
     const todayPurchases = {
       qty: parseFloat(todayPurchasesRes.rows[0].qty) || 0,
