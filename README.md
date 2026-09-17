@@ -7,6 +7,9 @@
 > **Backend**: Node.js & Express REST API with JWT Security  
 > **Frontend**: React 18, TypeScript, Tailwind CSS, Recharts & Lucide Icons  
 
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fnaimtv90-art%2FDPO-Apps&project-name=dairypureorganic-milk-manager&repository-name=dpo-milk-manager)
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/naimtv90-art/DPO-Apps)
+
 ---
 
 ## 📱 Default Demo Credentials
