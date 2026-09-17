@@ -47,8 +47,8 @@ export const LoginModal: React.FC = () => {
         <div className="absolute -bottom-24 -left-24 w-48 h-48 bg-teal-500/20 rounded-full blur-3xl pointer-events-none"></div>
 
         <div className="text-center mb-8 relative">
-          <div className="w-16 h-16 mx-auto mb-3 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-400 p-1 shadow-lg shadow-emerald-500/20 flex items-center justify-center">
-            <img src="/logo.png" alt="Logo" className="w-full h-full object-contain rounded-xl bg-white/20 p-1" />
+          <div className="h-20 w-full max-w-[220px] mx-auto mb-3 flex items-center justify-center">
+            <img src="/logo.png" alt="Dairy Pure & Organic" className="h-full w-auto object-contain drop-shadow-md" />
           </div>
           <h2 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">
             {settings.business_name || 'Dairy Pure & Organic'}
