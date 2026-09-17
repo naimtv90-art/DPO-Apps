@@ -19,6 +19,7 @@ if (isPostgres) {
   const connectionString = process.env.DATABASE_URL;
   const isLocalPg = connectionString.includes('localhost') || connectionString.includes('127.0.0.1');
   
+  pg.types.setTypeParser(1082, (val) => val); // Returns DATE as 'YYYY-MM-DD' string
   pgPool = new pg.Pool({
     connectionString,
     ssl: isLocalPg ? false : { rejectUnauthorized: false },

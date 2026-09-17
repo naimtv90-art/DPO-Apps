@@ -90,6 +90,7 @@ export const DashboardView: React.FC = () => {
   const [chartFilter, setChartFilter] = useState<'7days' | '30days' | 'thisMonth' | 'all'>('7days');
 
   useEffect(() => {
+    setLoading(true);
     api.getDashboardStats()
       .then(res => {
         if (res && res.today) {
@@ -98,23 +99,10 @@ export const DashboardView: React.FC = () => {
       })
       .catch((err) => {
         console.error('Dashboard stats fetch error:', err);
-      });
-
-    // Also sync latest live stock
-    api.getStock()
-      .then(st => {
-        if (st && st.availableStock !== undefined) {
-          setStats(prev => ({
-            ...prev,
-            currentStock: st.availableStock,
-            today: {
-              ...prev.today,
-              remaining: st.currentStock
-            }
-          }));
-        }
       })
-      .catch(console.error);
+      .finally(() => {
+        setLoading(false);
+      });
   }, [refreshKey]);
 
   // Filter chart data points

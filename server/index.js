@@ -141,10 +141,32 @@ app.get('/api/auth/me', async (req, res) => {
   }
 });
 
+// Universal Date Normalizer (Handles JS Date Objects, ISO Strings, SQLite and PG strings)
+function normalizeDate(val) {
+  if (!val) return '';
+  if (val instanceof Date) {
+    const y = val.getFullYear();
+    const m = String(val.getMonth() + 1).padStart(2, '0');
+    const d = String(val.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+  const str = String(val);
+  if (str.includes('T')) return str.split('T')[0];
+  if (/^\d{4}-\d{2}-\d{2}/.test(str)) return str.substring(0, 10);
+  const parsed = new Date(str);
+  if (!isNaN(parsed.getTime())) {
+    const y = parsed.getFullYear();
+    const m = String(parsed.getMonth() + 1).padStart(2, '0');
+    const d = String(parsed.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+  return str.substring(0, 10);
+}
+
 // ---------------- DASHBOARD API ----------------
 app.get('/api/dashboard/stats', async (req, res) => {
   try {
-    const today = new Date().toISOString().substring(0, 10);
+    const today = normalizeDate(new Date());
     const currentYearMonth = today.substring(0, 7); // e.g. '2026-09'
 
     const allPurchasesRes = await query('SELECT * FROM milk_purchases ORDER BY date DESC, id DESC');
@@ -176,7 +198,7 @@ app.get('/api/dashboard/stats', async (req, res) => {
     for (const p of allPurchasesRes.rows) {
       const q = parseFloat(p.quantity) || 0;
       const c = parseFloat(p.total_cost) || 0;
-      const d = String(p.date).substring(0, 10);
+      const d = normalizeDate(p.date);
 
       totalPurchased += q;
       totalPurchaseCost += c;
@@ -198,7 +220,7 @@ app.get('/api/dashboard/stats', async (req, res) => {
     for (const s of allSalesRes.rows) {
       const q = parseFloat(s.quantity) || 0;
       const r = parseFloat(s.total_sale) || 0;
-      const d = String(s.date).substring(0, 10);
+      const d = normalizeDate(s.date);
 
       totalSold += q;
       totalSalesRevenue += r;
@@ -219,7 +241,7 @@ app.get('/api/dashboard/stats', async (req, res) => {
 
     for (const e of allExpensesRes.rows) {
       const a = parseFloat(e.amount) || 0;
-      const d = String(e.date).substring(0, 10);
+      const d = normalizeDate(e.date);
 
       totalExpenses += a;
 
@@ -304,9 +326,25 @@ app.get('/api/dashboard/stats', async (req, res) => {
       },
       latestRate: latestRateRes.rows[0] || { purchase_rate: 60, selling_rate: 85, unit: 'Liter' },
       charts: formattedCharts,
-      recentPurchases: allPurchasesRes.rows.slice(0, 5).map(p => ({ ...p, date: String(p.date).substring(0, 10) })),
-      recentSales: allSalesRes.rows.slice(0, 5).map(s => ({ ...s, date: String(s.date).substring(0, 10) })),
-      recentExpenses: allExpensesRes.rows.slice(0, 5).map(e => ({ ...e, date: String(e.date).substring(0, 10) }))
+      recentPurchases: allPurchasesRes.rows.slice(0, 5).map(p => ({
+        ...p,
+        date: normalizeDate(p.date),
+        quantity: parseFloat(p.quantity) || 0,
+        purchase_rate: parseFloat(p.purchase_rate) || 0,
+        total_cost: parseFloat(p.total_cost) || 0
+      })),
+      recentSales: allSalesRes.rows.slice(0, 5).map(s => ({
+        ...s,
+        date: normalizeDate(s.date),
+        quantity: parseFloat(s.quantity) || 0,
+        selling_rate: parseFloat(s.selling_rate) || 0,
+        total_sale: parseFloat(s.total_sale) || 0
+      })),
+      recentExpenses: allExpensesRes.rows.slice(0, 5).map(e => ({
+        ...e,
+        date: normalizeDate(e.date),
+        amount: parseFloat(e.amount) || 0
+      }))
     });
   } catch (err) {
     console.error('Error fetching dashboard stats:', err);
@@ -347,10 +385,10 @@ app.get('/api/purchases', async (req, res) => {
 
     const purchases = result.rows.map(p => ({
       ...p,
-      date: String(p.date).substring(0, 10),
-      quantity: parseFloat(p.quantity),
-      purchase_rate: parseFloat(p.purchase_rate),
-      total_cost: parseFloat(p.total_cost)
+      date: normalizeDate(p.date),
+      quantity: parseFloat(p.quantity) || 0,
+      purchase_rate: parseFloat(p.purchase_rate) || 0,
+      total_cost: parseFloat(p.total_cost) || 0
     }));
 
     const summary = {
@@ -515,10 +553,10 @@ app.get('/api/sales', async (req, res) => {
 
     const sales = result.rows.map(s => ({
       ...s,
-      date: String(s.date).substring(0, 10),
-      quantity: parseFloat(s.quantity),
-      selling_rate: parseFloat(s.selling_rate),
-      total_sale: parseFloat(s.total_sale)
+      date: normalizeDate(s.date),
+      quantity: parseFloat(s.quantity) || 0,
+      selling_rate: parseFloat(s.selling_rate) || 0,
+      total_sale: parseFloat(s.total_sale) || 0
     }));
 
     const summary = {
@@ -688,10 +726,10 @@ app.get('/api/stock', async (req, res) => {
 
     const movements = movementsRes.rows.map(m => ({
       ...m,
-      date: String(m.date).substring(0, 10),
-      quantity: parseFloat(m.quantity),
-      rate: parseFloat(m.rate),
-      total_amount: parseFloat(m.total_amount)
+      date: normalizeDate(m.date),
+      quantity: parseFloat(m.quantity) || 0,
+      rate: parseFloat(m.rate) || 0,
+      total_amount: parseFloat(m.total_amount) || 0
     }));
 
     res.json({
@@ -716,11 +754,11 @@ app.get('/api/rates', async (req, res) => {
     const ratesRes = await query('SELECT * FROM milk_rates ORDER BY date DESC, id DESC');
     const rates = ratesRes.rows.map(r => ({
       ...r,
-      date: String(r.date).substring(0, 10),
-      purchase_rate: parseFloat(r.purchase_rate),
-      selling_rate: parseFloat(r.selling_rate)
+      date: normalizeDate(r.date),
+      purchase_rate: parseFloat(r.purchase_rate) || 0,
+      selling_rate: parseFloat(r.selling_rate) || 0
     }));
-    const latest = rates[0] || { purchase_rate: 60, selling_rate: 85, unit: 'Liter', date: new Date().toISOString().split('T')[0] };
+    const latest = rates[0] || { purchase_rate: 60, selling_rate: 85, unit: 'Liter', date: normalizeDate(new Date()) };
     res.json({ rates, latest });
   } catch (err) {
     console.error(err);
@@ -801,7 +839,7 @@ app.get('/api/daily-summary', async (req, res) => {
       const remaining = pQty - sQty;
 
       return {
-        date: typeof date === 'string' ? date.substring(0, 10) : new Date(date).toISOString().substring(0, 10),
+        date: normalizeDate(date),
         purchasedQty: pQty,
         purchaseCost: pCost,
         soldQty: sQty,
@@ -904,7 +942,7 @@ app.get('/api/reports', async (req, res) => {
       const dayGrossProfit = daySRev - dayCogs;
 
       return {
-        date: typeof date === 'string' ? date.substring(0, 10) : new Date(date).toISOString().substring(0, 10),
+        date: normalizeDate(date),
         purchasedQty: dayPQty,
         purchaseCost: dayPCost,
         soldQty: daySQty,
@@ -960,8 +998,8 @@ app.get('/api/expenses', async (req, res) => {
 
     const expenses = result.rows.map(e => ({
       ...e,
-      date: String(e.date).substring(0, 10),
-      amount: parseFloat(e.amount)
+      date: normalizeDate(e.date),
+      amount: parseFloat(e.amount) || 0
     }));
 
     const totalAmount = expenses.reduce((sum, e) => sum + e.amount, 0);
@@ -1066,10 +1104,10 @@ app.get('/api/customers/:id/sales', async (req, res) => {
     const salesRes = await query('SELECT * FROM milk_sales WHERE customer_id = ? OR customer_name = ? ORDER BY date DESC', [id, customer.name]);
     const sales = salesRes.rows.map(s => ({
       ...s,
-      date: String(s.date).substring(0, 10),
-      quantity: parseFloat(s.quantity),
-      selling_rate: parseFloat(s.selling_rate),
-      total_sale: parseFloat(s.total_sale)
+      date: normalizeDate(s.date),
+      quantity: parseFloat(s.quantity) || 0,
+      selling_rate: parseFloat(s.selling_rate) || 0,
+      total_sale: parseFloat(s.total_sale) || 0
     }));
 
     res.json({ customer, sales });
@@ -1160,10 +1198,10 @@ app.get('/api/suppliers/:id/purchases', async (req, res) => {
     const purchasesRes = await query('SELECT * FROM milk_purchases WHERE supplier_id = ? OR supplier_name = ? ORDER BY date DESC', [id, supplier.name]);
     const purchases = purchasesRes.rows.map(p => ({
       ...p,
-      date: String(p.date).substring(0, 10),
-      quantity: parseFloat(p.quantity),
-      purchase_rate: parseFloat(p.purchase_rate),
-      total_cost: parseFloat(p.total_cost)
+      date: normalizeDate(p.date),
+      quantity: parseFloat(p.quantity) || 0,
+      purchase_rate: parseFloat(p.purchase_rate) || 0,
+      total_cost: parseFloat(p.total_cost) || 0
     }));
 
     res.json({ supplier, purchases });
