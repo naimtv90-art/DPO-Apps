@@ -144,173 +144,169 @@ app.get('/api/auth/me', async (req, res) => {
 // ---------------- DASHBOARD API ----------------
 app.get('/api/dashboard/stats', async (req, res) => {
   try {
-    const today = new Date().toISOString().split('T')[0];
+    const today = new Date().toISOString().substring(0, 10);
     const currentYearMonth = today.substring(0, 7); // e.g. '2026-09'
 
-    const metrics = await getInventoryMetrics();
+    const allPurchasesRes = await query('SELECT * FROM milk_purchases ORDER BY date DESC, id DESC');
+    const allSalesRes = await query('SELECT * FROM milk_sales ORDER BY date DESC, id DESC');
+    const allExpensesRes = await query('SELECT * FROM expenses ORDER BY date DESC, id DESC');
+    const latestRateRes = await query('SELECT * FROM milk_rates ORDER BY date DESC, id DESC LIMIT 1');
 
-    // Today's purchases
-    const todayPurchasesRes = await query(`
-      SELECT 
-        COALESCE(SUM(quantity), 0) as qty,
-        COALESCE(SUM(total_cost), 0) as cost,
-        COUNT(*) as count
-      FROM milk_purchases 
-      WHERE CAST(date AS TEXT) LIKE ?
-    `, [`${today}%`]);
+    // Financial & Volume Accumulators
+    let totalPurchased = 0;
+    let totalPurchaseCost = 0;
+    let totalSold = 0;
+    let totalSalesRevenue = 0;
+    let totalExpenses = 0;
 
-    // Today's sales
-    const todaySalesRes = await query(`
-      SELECT 
-        COALESCE(SUM(quantity), 0) as qty,
-        COALESCE(SUM(total_sale), 0) as revenue,
-        COUNT(*) as count
-      FROM milk_sales 
-      WHERE CAST(date AS TEXT) LIKE ?
-    `, [`${today}%`]);
+    let todayPurchaseQty = 0;
+    let todayPurchaseCost = 0;
+    let todaySalesQty = 0;
+    let todaySalesRevenue = 0;
+    let todayExpenseTotal = 0;
 
-    // Today's expenses
-    const todayExpensesRes = await query(`
-      SELECT COALESCE(SUM(amount), 0) as total
-      FROM expenses 
-      WHERE CAST(date AS TEXT) LIKE ?
-    `, [`${today}%`]);
+    let monthPurchaseQty = 0;
+    let monthPurchaseCost = 0;
+    let monthSalesQty = 0;
+    let monthSalesRevenue = 0;
+    let monthExpenseTotal = 0;
 
-    const todayPurchases = {
-      qty: parseFloat(todayPurchasesRes.rows[0].qty) || 0,
-      cost: parseFloat(todayPurchasesRes.rows[0].cost) || 0,
-    };
+    const dateMap = {};
 
-    const todaySales = {
-      qty: parseFloat(todaySalesRes.rows[0].qty) || 0,
-      revenue: parseFloat(todaySalesRes.rows[0].revenue) || 0,
-    };
+    for (const p of allPurchasesRes.rows) {
+      const q = parseFloat(p.quantity) || 0;
+      const c = parseFloat(p.total_cost) || 0;
+      const d = String(p.date).substring(0, 10);
 
-    const todayExpenses = {
-      total: parseFloat(todayExpensesRes.rows[0].total) || 0,
-    };
+      totalPurchased += q;
+      totalPurchaseCost += c;
 
-    const todayCOGS = todaySales.qty * metrics.weightedAvgCost;
-    const todayGrossProfit = todaySales.revenue - todayCOGS;
-    const todayNetProfit = todayGrossProfit - todayExpenses.total;
-    const todayRemaining = todayPurchases.qty - todaySales.qty;
-
-    // Month's stats
-    const monthPurchasesRes = await query(`
-      SELECT 
-        COALESCE(SUM(quantity), 0) as qty,
-        COALESCE(SUM(total_cost), 0) as cost
-      FROM milk_purchases 
-      WHERE CAST(date AS TEXT) LIKE ?
-    `, [`${currentYearMonth}%`]);
-
-    const monthSalesRes = await query(`
-      SELECT 
-        COALESCE(SUM(quantity), 0) as qty,
-        COALESCE(SUM(total_sale), 0) as revenue
-      FROM milk_sales 
-      WHERE CAST(date AS TEXT) LIKE ?
-    `, [`${currentYearMonth}%`]);
-
-    const monthExpensesRes = await query(`
-      SELECT COALESCE(SUM(amount), 0) as total
-      FROM expenses 
-      WHERE CAST(date AS TEXT) LIKE ?
-    `, [`${currentYearMonth}%`]);
-
-    const monthPurchases = {
-      qty: parseFloat(monthPurchasesRes.rows[0].qty) || 0,
-      cost: parseFloat(monthPurchasesRes.rows[0].cost) || 0,
-    };
-
-    const monthSales = {
-      qty: parseFloat(monthSalesRes.rows[0].qty) || 0,
-      revenue: parseFloat(monthSalesRes.rows[0].revenue) || 0,
-    };
-
-    const monthExpenses = {
-      total: parseFloat(monthExpensesRes.rows[0].total) || 0,
-    };
-
-    const monthCOGS = monthSales.qty * metrics.weightedAvgCost;
-    const monthGrossProfit = monthSales.revenue - monthCOGS;
-    const monthNetProfit = monthGrossProfit - monthExpenses.total;
-
-    // Chart history (Robust in-memory aggregation)
-    let formattedCharts = [];
-    try {
-      const allPurchases = await query('SELECT CAST(date AS TEXT) as date, quantity, total_cost FROM milk_purchases');
-      const allSales = await query('SELECT CAST(date AS TEXT) as date, quantity, total_sale FROM milk_sales');
-      const allExpenses = await query('SELECT CAST(date AS TEXT) as date, amount FROM expenses');
-
-      const dateMap = {};
-      for (const p of allPurchases.rows) {
-        const d = String(p.date).substring(0, 10);
-        if (!dateMap[d]) dateMap[d] = { date: d, purchaseQty: 0, purchaseCost: 0, salesQty: 0, salesRevenue: 0, expenses: 0 };
-        dateMap[d].purchaseQty += parseFloat(p.quantity) || 0;
-        dateMap[d].purchaseCost += parseFloat(p.total_cost) || 0;
+      if (d === today) {
+        todayPurchaseQty += q;
+        todayPurchaseCost += c;
       }
-      for (const s of allSales.rows) {
-        const d = String(s.date).substring(0, 10);
-        if (!dateMap[d]) dateMap[d] = { date: d, purchaseQty: 0, purchaseCost: 0, salesQty: 0, salesRevenue: 0, expenses: 0 };
-        dateMap[d].salesQty += parseFloat(s.quantity) || 0;
-        dateMap[d].salesRevenue += parseFloat(s.total_sale) || 0;
-      }
-      for (const e of allExpenses.rows) {
-        const d = String(e.date).substring(0, 10);
-        if (!dateMap[d]) dateMap[d] = { date: d, purchaseQty: 0, purchaseCost: 0, salesQty: 0, salesRevenue: 0, expenses: 0 };
-        dateMap[d].expenses += parseFloat(e.amount) || 0;
+      if (d.startsWith(currentYearMonth)) {
+        monthPurchaseQty += q;
+        monthPurchaseCost += c;
       }
 
-      formattedCharts = Object.values(dateMap).sort((a, b) => a.date.localeCompare(b.date)).map(row => {
-        const cogs = row.salesQty * metrics.weightedAvgCost;
-        const grossProfit = row.salesRevenue - cogs;
-        const netProfit = grossProfit - row.expenses;
-        return {
-          ...row,
-          grossProfit: Math.round(grossProfit),
-          netProfit: Math.round(netProfit),
-          cogs: Math.round(cogs)
-        };
-      });
-    } catch (chartErr) {
-      console.warn('Chart mapping warning:', chartErr);
+      if (!dateMap[d]) dateMap[d] = { date: d, purchaseQty: 0, purchaseCost: 0, salesQty: 0, salesRevenue: 0, expenses: 0 };
+      dateMap[d].purchaseQty += q;
+      dateMap[d].purchaseCost += c;
     }
 
-    const recentPurchasesRes = await query('SELECT * FROM milk_purchases ORDER BY date DESC, id DESC LIMIT 5');
-    const recentSalesRes = await query('SELECT * FROM milk_sales ORDER BY date DESC, id DESC LIMIT 5');
-    const recentExpensesRes = await query('SELECT * FROM expenses ORDER BY date DESC, id DESC LIMIT 5');
-    const latestRateRes = await query('SELECT * FROM milk_rates ORDER BY date DESC, id DESC LIMIT 1');
+    for (const s of allSalesRes.rows) {
+      const q = parseFloat(s.quantity) || 0;
+      const r = parseFloat(s.total_sale) || 0;
+      const d = String(s.date).substring(0, 10);
+
+      totalSold += q;
+      totalSalesRevenue += r;
+
+      if (d === today) {
+        todaySalesQty += q;
+        todaySalesRevenue += r;
+      }
+      if (d.startsWith(currentYearMonth)) {
+        monthSalesQty += q;
+        monthSalesRevenue += r;
+      }
+
+      if (!dateMap[d]) dateMap[d] = { date: d, purchaseQty: 0, purchaseCost: 0, salesQty: 0, salesRevenue: 0, expenses: 0 };
+      dateMap[d].salesQty += q;
+      dateMap[d].salesRevenue += r;
+    }
+
+    for (const e of allExpensesRes.rows) {
+      const a = parseFloat(e.amount) || 0;
+      const d = String(e.date).substring(0, 10);
+
+      totalExpenses += a;
+
+      if (d === today) {
+        todayExpenseTotal += a;
+      }
+      if (d.startsWith(currentYearMonth)) {
+        monthExpenseTotal += a;
+      }
+
+      if (!dateMap[d]) dateMap[d] = { date: d, purchaseQty: 0, purchaseCost: 0, salesQty: 0, salesRevenue: 0, expenses: 0 };
+      dateMap[d].expenses += a;
+    }
+
+    const currentStock = Math.max(0, totalPurchased - totalSold);
+    const weightedAvgCost = totalPurchased > 0 ? (totalPurchaseCost / totalPurchased) : 0;
+    const totalCOGS = totalSold * weightedAvgCost;
+    const totalGrossProfit = totalSalesRevenue - totalCOGS;
+    const totalNetProfit = totalGrossProfit - totalExpenses;
+    const grossMargin = totalSalesRevenue > 0 ? ((totalGrossProfit / totalSalesRevenue) * 100) : 0;
+    const profitPerLiter = totalSold > 0 ? (totalGrossProfit / totalSold) : 0;
+    const avgSellingRate = totalSold > 0 ? (totalSalesRevenue / totalSold) : 0;
+
+    const todayCOGS = todaySalesQty * weightedAvgCost;
+    const todayGrossProfit = todaySalesRevenue - todayCOGS;
+    const todayNetProfit = todayGrossProfit - todayExpenseTotal;
+    const todayRemaining = todayPurchaseQty - todaySalesQty;
+
+    const monthCOGS = monthSalesQty * weightedAvgCost;
+    const monthGrossProfit = monthSalesRevenue - monthCOGS;
+    const monthNetProfit = monthGrossProfit - monthExpenseTotal;
+
+    const formattedCharts = Object.values(dateMap).sort((a, b) => a.date.localeCompare(b.date)).map(row => {
+      const cogs = row.salesQty * weightedAvgCost;
+      const grossProfit = row.salesRevenue - cogs;
+      const netProfit = grossProfit - row.expenses;
+      return {
+        ...row,
+        grossProfit: Math.round(grossProfit),
+        netProfit: Math.round(netProfit),
+        cogs: Math.round(cogs)
+      };
+    });
 
     res.json({
       today: {
         date: today,
-        purchaseQty: todayPurchases.qty,
-        purchaseCost: todayPurchases.cost,
-        salesQty: todaySales.qty,
-        salesRevenue: todaySales.revenue,
-        expenses: todayExpenses.total,
+        purchaseQty: todayPurchaseQty,
+        purchaseCost: todayPurchaseCost,
+        salesQty: todaySalesQty,
+        salesRevenue: todaySalesRevenue,
+        expenses: todayExpenseTotal,
         grossProfit: Math.round(todayGrossProfit),
         netProfit: Math.round(todayNetProfit),
         cogs: Math.round(todayCOGS),
         remaining: todayRemaining,
       },
-      currentStock: metrics.currentStock,
-      allTime: metrics,
+      currentStock,
+      allTime: {
+        totalPurchased,
+        totalPurchaseCost,
+        totalSold,
+        totalSalesRevenue,
+        currentStock,
+        weightedAvgCost,
+        totalCOGS,
+        totalGrossProfit,
+        totalExpenses,
+        totalNetProfit,
+        grossMargin,
+        profitPerLiter,
+        avgSellingRate
+      },
       month: {
-        purchaseQty: monthPurchases.qty,
-        purchaseCost: monthPurchases.cost,
-        salesQty: monthSales.qty,
-        salesRevenue: monthSales.revenue,
-        expenses: monthExpenses.total,
+        purchaseQty: monthPurchaseQty,
+        purchaseCost: monthPurchaseCost,
+        salesQty: monthSalesQty,
+        salesRevenue: monthSalesRevenue,
+        expenses: monthExpenseTotal,
         grossProfit: Math.round(monthGrossProfit),
         netProfit: Math.round(monthNetProfit),
       },
       latestRate: latestRateRes.rows[0] || { purchase_rate: 60, selling_rate: 85, unit: 'Liter' },
       charts: formattedCharts,
-      recentPurchases: recentPurchases.rows.map(p => ({ ...p, date: String(p.date).substring(0, 10) })),
-      recentSales: recentSales.rows.map(s => ({ ...s, date: String(s.date).substring(0, 10) })),
-      recentExpenses: recentExpenses.rows.map(e => ({ ...e, date: String(e.date).substring(0, 10) }))
+      recentPurchases: allPurchasesRes.rows.slice(0, 5).map(p => ({ ...p, date: String(p.date).substring(0, 10) })),
+      recentSales: allSalesRes.rows.slice(0, 5).map(s => ({ ...s, date: String(s.date).substring(0, 10) })),
+      recentExpenses: allExpensesRes.rows.slice(0, 5).map(e => ({ ...e, date: String(e.date).substring(0, 10) }))
     });
   } catch (err) {
     console.error('Error fetching dashboard stats:', err);
