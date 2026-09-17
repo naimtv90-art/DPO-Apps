@@ -33,10 +33,16 @@ if (isPostgres) {
 
   console.log('🐘 Connected to Online PostgreSQL Database Pool');
 } else {
-  const dbPath = path.join(__dirname, 'dpo_milk.sqlite');
-  sqliteDb = new Database(dbPath);
-  sqliteDb.pragma('journal_mode = WAL');
-  console.log('🗄️ Running on Local SQLite Database engine');
+  try {
+    const dbPath = process.env.VERCEL 
+      ? path.join('/tmp', 'dpo_milk.sqlite') 
+      : path.join(__dirname, 'dpo_milk.sqlite');
+    sqliteDb = new Database(dbPath);
+    sqliteDb.pragma('journal_mode = WAL');
+    console.log('🗄️ Running on Local SQLite Database engine at', dbPath);
+  } catch (sqliteErr) {
+    console.warn('⚠️ SQLite init warning:', sqliteErr.message);
+  }
 }
 
 // Unified Database Query Adapter
