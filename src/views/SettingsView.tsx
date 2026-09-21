@@ -205,6 +205,42 @@ export const SettingsView: React.FC = () => {
           </div>
         </div>
 
+        {/* Mobile App & Remote Server URL */}
+        <div className="p-6 sm:p-8 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+              <DollarSign className="w-4 h-4 text-emerald-600" /> Mobile App & Server Connection (মোবাইল অ্যাপ সংযোগ)
+            </h2>
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300">
+              Capacitor APK & PWA
+            </span>
+          </div>
+
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            মোবাইল APK বা অন্য ডিভাইস থেকে ব্যবহার করতে চাইলে আপনার ব্যাকএন্ড সার্ভার লিংক (যেমন: <code className="text-emerald-600 dark:text-emerald-400">http://192.168.0.x:5000</code> অথবা ক্লাউড হোস্টিং URL) এখানে সেট করতে পারেন। লোকাল পিসির জন্য খালি রাখলেই চলবে।
+          </p>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+              Backend Server URL
+            </label>
+            <input
+              type="text"
+              placeholder="e.g. http://192.168.0.105:5000 or https://your-domain.com"
+              defaultValue={localStorage.getItem('dpo_custom_api_url') || ''}
+              onChange={e => {
+                const val = e.target.value.trim();
+                if (val) {
+                  localStorage.setItem('dpo_custom_api_url', val);
+                } else {
+                  localStorage.removeItem('dpo_custom_api_url');
+                }
+              }}
+              className="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm font-mono focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
+            />
+          </div>
+        </div>
+
         {/* Action Button */}
         <div className="flex items-center justify-end">
           <button

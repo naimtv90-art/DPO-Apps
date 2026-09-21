@@ -37,6 +37,12 @@ server/*.sqlite-wal
 server/*.db-journal
 server/*.sqlite-journal
 server/milk_manager.db
-server/uploads/*
-!server/uploads/.gitkeep
-
+# Android build artifacts
+android/.gradle
+android/build
+android/app/build
+android/.idea
+android/*.iml
+android/local.properties
+android/captures
+android/.externalNativeBuild

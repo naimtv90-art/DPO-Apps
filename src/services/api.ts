@@ -13,7 +13,16 @@ import {
   User
 } from '../types';
 
-const BASE_URL = import.meta.env.VITE_API_URL || '/api';
+export const getBaseUrl = (): string => {
+  if (typeof window !== 'undefined') {
+    const custom = localStorage.getItem('dpo_custom_api_url');
+    if (custom && custom.trim() !== '') {
+      const clean = custom.trim().replace(/\/+$/, '');
+      return clean.endsWith('/api') ? clean : `${clean}/api`;
+    }
+  }
+  return import.meta.env.VITE_API_URL || '/api';
+};
 
 async function handleResponse<T>(res: Response, fallbackData?: T): Promise<T> {
   try {
@@ -36,7 +45,7 @@ async function handleResponse<T>(res: Response, fallbackData?: T): Promise<T> {
 export const api = {
   // Auth
   login: async (credentials: { username: string; password: string }): Promise<{ token: string; user: User }> => {
-    const res = await fetch(`${BASE_URL}/auth/login`, {
+    const res = await fetch(`${getBaseUrl()}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(credentials)
@@ -45,13 +54,13 @@ export const api = {
   },
 
   getMe: async (): Promise<{ user: User }> => {
-    const res = await fetch(`${BASE_URL}/auth/me`);
+    const res = await fetch(`${getBaseUrl()}/auth/me`);
     return handleResponse(res);
   },
 
   // Dashboard Stats
   getDashboardStats: async (): Promise<DashboardStats> => {
-    const res = await fetch(`${BASE_URL}/dashboard/stats`);
+    const res = await fetch(`${getBaseUrl()}/dashboard/stats`);
     return handleResponse(res);
   },
 
@@ -64,12 +73,12 @@ export const api = {
     if (params?.supplier) searchParams.append('supplier', params.supplier);
     if (params?.unit) searchParams.append('unit', params.unit);
     
-    const res = await fetch(`${BASE_URL}/purchases?${searchParams.toString()}`);
+    const res = await fetch(`${getBaseUrl()}/purchases?${searchParams.toString()}`);
     return handleResponse(res);
   },
 
   createPurchase: async (data: Partial<MilkPurchase>): Promise<{ message: string; purchase: MilkPurchase; stock: number }> => {
-    const res = await fetch(`${BASE_URL}/purchases`, {
+    const res = await fetch(`${getBaseUrl()}/purchases`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
@@ -78,7 +87,7 @@ export const api = {
   },
 
   updatePurchase: async (id: number, data: Partial<MilkPurchase>): Promise<{ message: string; purchase: MilkPurchase }> => {
-    const res = await fetch(`${BASE_URL}/purchases/${id}`, {
+    const res = await fetch(`${getBaseUrl()}/purchases/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
@@ -87,7 +96,7 @@ export const api = {
   },
 
   deletePurchase: async (id: number): Promise<{ message: string; stock: number }> => {
-    const res = await fetch(`${BASE_URL}/purchases/${id}`, {
+    const res = await fetch(`${getBaseUrl()}/purchases/${id}`, {
       method: 'DELETE'
     });
     return handleResponse(res);
@@ -103,12 +112,12 @@ export const api = {
     if (params?.paymentStatus) searchParams.append('paymentStatus', params.paymentStatus);
     if (params?.unit) searchParams.append('unit', params.unit);
 
-    const res = await fetch(`${BASE_URL}/sales?${searchParams.toString()}`);
+    const res = await fetch(`${getBaseUrl()}/sales?${searchParams.toString()}`);
     return handleResponse(res);
   },
 
   createSale: async (data: Partial<MilkSale>): Promise<{ message: string; sale: MilkSale; stock: number }> => {
-    const res = await fetch(`${BASE_URL}/sales`, {
+    const res = await fetch(`${getBaseUrl()}/sales`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
@@ -117,7 +126,7 @@ export const api = {
   },
 
   updateSale: async (id: number, data: Partial<MilkSale>): Promise<{ message: string; sale: MilkSale }> => {
-    const res = await fetch(`${BASE_URL}/sales/${id}`, {
+    const res = await fetch(`${getBaseUrl()}/sales/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
@@ -126,7 +135,7 @@ export const api = {
   },
 
   deleteSale: async (id: number): Promise<{ message: string; stock: number }> => {
-    const res = await fetch(`${BASE_URL}/sales/${id}`, {
+    const res = await fetch(`${getBaseUrl()}/sales/${id}`, {
       method: 'DELETE'
     });
     return handleResponse(res);
@@ -134,18 +143,18 @@ export const api = {
 
   // Stock
   getStock: async (): Promise<StockData> => {
-    const res = await fetch(`${BASE_URL}/stock`);
+    const res = await fetch(`${getBaseUrl()}/stock`);
     return handleResponse(res);
   },
 
   // Rates
   getRates: async (): Promise<{ rates: MilkRate[]; latest: MilkRate }> => {
-    const res = await fetch(`${BASE_URL}/rates`);
+    const res = await fetch(`${getBaseUrl()}/rates`);
     return handleResponse(res);
   },
 
   createRate: async (data: Partial<MilkRate>): Promise<{ message: string; rate: MilkRate }> => {
-    const res = await fetch(`${BASE_URL}/rates`, {
+    const res = await fetch(`${getBaseUrl()}/rates`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
@@ -158,7 +167,7 @@ export const api = {
     const searchParams = new URLSearchParams();
     if (params?.startDate) searchParams.append('startDate', params.startDate);
     if (params?.endDate) searchParams.append('endDate', params.endDate);
-    const res = await fetch(`${BASE_URL}/daily-summary?${searchParams.toString()}`);
+    const res = await fetch(`${getBaseUrl()}/daily-summary?${searchParams.toString()}`);
     return handleResponse(res);
   },
 
@@ -168,7 +177,7 @@ export const api = {
     if (params?.type) searchParams.append('type', params.type);
     if (params?.startDate) searchParams.append('startDate', params.startDate);
     if (params?.endDate) searchParams.append('endDate', params.endDate);
-    const res = await fetch(`${BASE_URL}/reports?${searchParams.toString()}`);
+    const res = await fetch(`${getBaseUrl()}/reports?${searchParams.toString()}`);
     return handleResponse(res);
   },
 
@@ -179,12 +188,12 @@ export const api = {
     if (params?.startDate) searchParams.append('startDate', params.startDate);
     if (params?.endDate) searchParams.append('endDate', params.endDate);
     if (params?.search) searchParams.append('search', params.search);
-    const res = await fetch(`${BASE_URL}/expenses?${searchParams.toString()}`);
+    const res = await fetch(`${getBaseUrl()}/expenses?${searchParams.toString()}`);
     return handleResponse(res);
   },
 
   createExpense: async (data: Partial<Expense>): Promise<{ message: string; expense: Expense }> => {
-    const res = await fetch(`${BASE_URL}/expenses`, {
+    const res = await fetch(`${getBaseUrl()}/expenses`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
@@ -193,7 +202,7 @@ export const api = {
   },
 
   updateExpense: async (id: number, data: Partial<Expense>): Promise<{ message: string; expense: Expense }> => {
-    const res = await fetch(`${BASE_URL}/expenses/${id}`, {
+    const res = await fetch(`${getBaseUrl()}/expenses/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
@@ -202,23 +211,23 @@ export const api = {
   },
 
   deleteExpense: async (id: number): Promise<{ message: string }> => {
-    const res = await fetch(`${BASE_URL}/expenses/${id}`, { method: 'DELETE' });
+    const res = await fetch(`${getBaseUrl()}/expenses/${id}`, { method: 'DELETE' });
     return handleResponse(res);
   },
 
   // Customers
   getCustomers: async (): Promise<{ customers: Customer[] }> => {
-    const res = await fetch(`${BASE_URL}/customers`);
+    const res = await fetch(`${getBaseUrl()}/customers`);
     return handleResponse(res);
   },
 
   getCustomerHistory: async (id: number): Promise<{ customer: Customer; sales: MilkSale[] }> => {
-    const res = await fetch(`${BASE_URL}/customers/${id}/sales`);
+    const res = await fetch(`${getBaseUrl()}/customers/${id}/sales`);
     return handleResponse(res);
   },
 
   createCustomer: async (data: Partial<Customer>): Promise<{ message: string; customer: Customer }> => {
-    const res = await fetch(`${BASE_URL}/customers`, {
+    const res = await fetch(`${getBaseUrl()}/customers`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
@@ -227,7 +236,7 @@ export const api = {
   },
 
   updateCustomer: async (id: number, data: Partial<Customer>): Promise<{ message: string; customer: Customer }> => {
-    const res = await fetch(`${BASE_URL}/customers/${id}`, {
+    const res = await fetch(`${getBaseUrl()}/customers/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
@@ -236,23 +245,23 @@ export const api = {
   },
 
   deleteCustomer: async (id: number): Promise<{ message: string }> => {
-    const res = await fetch(`${BASE_URL}/customers/${id}`, { method: 'DELETE' });
+    const res = await fetch(`${getBaseUrl()}/customers/${id}`, { method: 'DELETE' });
     return handleResponse(res);
   },
 
   // Suppliers
   getSuppliers: async (): Promise<{ suppliers: Supplier[] }> => {
-    const res = await fetch(`${BASE_URL}/suppliers`);
+    const res = await fetch(`${getBaseUrl()}/suppliers`);
     return handleResponse(res);
   },
 
   getSupplierHistory: async (id: number): Promise<{ supplier: Supplier; purchases: MilkPurchase[] }> => {
-    const res = await fetch(`${BASE_URL}/suppliers/${id}/purchases`);
+    const res = await fetch(`${getBaseUrl()}/suppliers/${id}/purchases`);
     return handleResponse(res);
   },
 
   createSupplier: async (data: Partial<Supplier>): Promise<{ message: string; supplier: Supplier }> => {
-    const res = await fetch(`${BASE_URL}/suppliers`, {
+    const res = await fetch(`${getBaseUrl()}/suppliers`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
@@ -261,7 +270,7 @@ export const api = {
   },
 
   updateSupplier: async (id: number, data: Partial<Supplier>): Promise<{ message: string; supplier: Supplier }> => {
-    const res = await fetch(`${BASE_URL}/suppliers/${id}`, {
+    const res = await fetch(`${getBaseUrl()}/suppliers/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
@@ -270,7 +279,7 @@ export const api = {
   },
 
   deleteSupplier: async (id: number): Promise<{ message: string }> => {
-    const res = await fetch(`${BASE_URL}/suppliers/${id}`, { method: 'DELETE' });
+    const res = await fetch(`${getBaseUrl()}/suppliers/${id}`, { method: 'DELETE' });
     return handleResponse(res);
   },
 
@@ -281,12 +290,12 @@ export const api = {
     if (params?.endDate) searchParams.append('endDate', params.endDate);
     if (params?.reason) searchParams.append('reason', params.reason);
     if (params?.search) searchParams.append('search', params.search);
-    const res = await fetch(`${BASE_URL}/waste?${searchParams.toString()}`);
+    const res = await fetch(`${getBaseUrl()}/waste?${searchParams.toString()}`);
     return handleResponse(res);
   },
 
   createWaste: async (data: Partial<ProductWaste>): Promise<{ message: string; waste: ProductWaste; stock: number }> => {
-    const res = await fetch(`${BASE_URL}/waste`, {
+    const res = await fetch(`${getBaseUrl()}/waste`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
@@ -295,7 +304,7 @@ export const api = {
   },
 
   updateWaste: async (id: number, data: Partial<ProductWaste>): Promise<{ message: string }> => {
-    const res = await fetch(`${BASE_URL}/waste/${id}`, {
+    const res = await fetch(`${getBaseUrl()}/waste/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
@@ -304,7 +313,7 @@ export const api = {
   },
 
   deleteWaste: async (id: number): Promise<{ message: string; stock: number }> => {
-    const res = await fetch(`${BASE_URL}/waste/${id}`, { method: 'DELETE' });
+    const res = await fetch(`${getBaseUrl()}/waste/${id}`, { method: 'DELETE' });
     return handleResponse(res);
   },
 
@@ -315,12 +324,12 @@ export const api = {
     if (params?.startDate) searchParams.append('startDate', params.startDate);
     if (params?.endDate) searchParams.append('endDate', params.endDate);
     if (params?.search) searchParams.append('search', params.search);
-    const res = await fetch(`${BASE_URL}/investments?${searchParams.toString()}`);
+    const res = await fetch(`${getBaseUrl()}/investments?${searchParams.toString()}`);
     return handleResponse(res);
   },
 
   createInvestment: async (data: Partial<PartnerInvestment>): Promise<{ message: string; investment: PartnerInvestment }> => {
-    const res = await fetch(`${BASE_URL}/investments`, {
+    const res = await fetch(`${getBaseUrl()}/investments`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
@@ -329,7 +338,7 @@ export const api = {
   },
 
   updateInvestment: async (id: number, data: Partial<PartnerInvestment>): Promise<{ message: string }> => {
-    const res = await fetch(`${BASE_URL}/investments/${id}`, {
+    const res = await fetch(`${getBaseUrl()}/investments/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
@@ -338,18 +347,18 @@ export const api = {
   },
 
   deleteInvestment: async (id: number): Promise<{ message: string }> => {
-    const res = await fetch(`${BASE_URL}/investments/${id}`, { method: 'DELETE' });
+    const res = await fetch(`${getBaseUrl()}/investments/${id}`, { method: 'DELETE' });
     return handleResponse(res);
   },
 
   // Partners Directory
   getPartners: async (): Promise<{ partners: Partner[]; totalCapital: number }> => {
-    const res = await fetch(`${BASE_URL}/partners`);
+    const res = await fetch(`${getBaseUrl()}/partners`);
     return handleResponse(res);
   },
 
   createPartner: async (data: Partial<Partner>): Promise<{ message: string; id: number }> => {
-    const res = await fetch(`${BASE_URL}/partners`, {
+    const res = await fetch(`${getBaseUrl()}/partners`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
@@ -358,7 +367,7 @@ export const api = {
   },
 
   updatePartner: async (id: number, data: Partial<Partner>): Promise<{ message: string }> => {
-    const res = await fetch(`${BASE_URL}/partners/${id}`, {
+    const res = await fetch(`${getBaseUrl()}/partners/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
@@ -368,12 +377,12 @@ export const api = {
 
   // Settings
   getSettings: async (): Promise<{ settings: AppSettings }> => {
-    const res = await fetch(`${BASE_URL}/settings`);
+    const res = await fetch(`${getBaseUrl()}/settings`);
     return handleResponse(res);
   },
 
   saveSettings: async (settings: Partial<AppSettings>): Promise<{ message: string }> => {
-    const res = await fetch(`${BASE_URL}/settings`, {
+    const res = await fetch(`${getBaseUrl()}/settings`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(settings)
