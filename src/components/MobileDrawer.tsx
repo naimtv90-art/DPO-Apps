@@ -15,7 +15,9 @@ import {
   Settings as SettingsIcon,
   PlusCircle,
   History,
-  LogOut
+  LogOut,
+  Trash2,
+  Briefcase
 } from 'lucide-react';
 
 export const MobileDrawer: React.FC = () => {
@@ -43,6 +45,8 @@ export const MobileDrawer: React.FC = () => {
     { id: 'add-sale' as NavView, label: 'Add Milk Sale', icon: <PlusCircle className="w-5 h-5 text-sky-500" /> },
     { id: 'sales-history' as NavView, label: 'Sales History', icon: <ShoppingCart className="w-5 h-5 text-sky-500" /> },
     { id: 'inventory' as NavView, label: 'Milk Stock', icon: <Boxes className="w-5 h-5 text-amber-500" /> },
+    { id: 'waste' as NavView, label: 'Product Waste', icon: <Trash2 className="w-5 h-5 text-orange-500" /> },
+    { id: 'investments' as NavView, label: 'Partner Investments', icon: <Briefcase className="w-5 h-5 text-blue-500" /> },
     { id: 'rates' as NavView, label: 'Rate Management', icon: <TrendingUp className="w-5 h-5 text-purple-500" /> },
     { id: 'daily-summary' as NavView, label: 'Daily Summary', icon: <CalendarCheck className="w-5 h-5 text-teal-500" /> },
     { id: 'reports' as NavView, label: 'Reports', icon: <BarChart3 className="w-5 h-5 text-indigo-500" /> },

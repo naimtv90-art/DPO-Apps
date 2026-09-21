@@ -205,6 +205,45 @@ export async function initDatabase() {
         notes TEXT,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
+      CREATE TABLE IF NOT EXISTS partners (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        phone VARCHAR(50),
+        role VARCHAR(100) DEFAULT 'Partner / Shareholder',
+        notes TEXT,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS partner_investments (
+        id SERIAL PRIMARY KEY,
+        partner_name VARCHAR(255) NOT NULL,
+        partner_id INTEGER REFERENCES partners(id) ON DELETE SET NULL,
+        amount NUMERIC(12, 2) NOT NULL CHECK (amount > 0),
+        date DATE NOT NULL,
+        investment_type VARCHAR(100) DEFAULT 'Capital Investment',
+        payment_method VARCHAR(100) DEFAULT 'Bank Transfer',
+        notes TEXT,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS product_waste (
+        id SERIAL PRIMARY KEY,
+        date DATE NOT NULL,
+        product_name VARCHAR(255) DEFAULT 'Raw Milk',
+        quantity NUMERIC(12, 2) NOT NULL CHECK (quantity > 0),
+        unit VARCHAR(20) DEFAULT 'Liter',
+        reason VARCHAR(100) NOT NULL,
+        estimated_loss NUMERIC(12, 2) NOT NULL,
+        notes TEXT,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_purchases_date ON milk_purchases(date DESC);
+      CREATE INDEX IF NOT EXISTS idx_sales_date ON milk_sales(date DESC);
+      CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses(date DESC);
+      CREATE INDEX IF NOT EXISTS idx_rates_date ON milk_rates(date DESC);
+      CREATE INDEX IF NOT EXISTS idx_investments_date ON partner_investments(date DESC);
+      CREATE INDEX IF NOT EXISTS idx_waste_date ON product_waste(date DESC);
     `;
     await pgPool.query(postgresSchema);
   } else {
@@ -294,6 +333,47 @@ export async function initDatabase() {
         notes TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       );
+
+      CREATE TABLE IF NOT EXISTS partners (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        phone TEXT,
+        role TEXT DEFAULT 'Partner / Shareholder',
+        notes TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS partner_investments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        partner_name TEXT NOT NULL,
+        partner_id INTEGER,
+        amount REAL NOT NULL,
+        date TEXT NOT NULL,
+        investment_type TEXT DEFAULT 'Capital Investment',
+        payment_method TEXT DEFAULT 'Bank Transfer',
+        notes TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (partner_id) REFERENCES partners(id)
+      );
+
+      CREATE TABLE IF NOT EXISTS product_waste (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        date TEXT NOT NULL,
+        product_name TEXT DEFAULT 'Raw Milk',
+        quantity REAL NOT NULL,
+        unit TEXT DEFAULT 'Liter',
+        reason TEXT NOT NULL,
+        estimated_loss REAL NOT NULL,
+        notes TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_purchases_date ON milk_purchases(date DESC);
+      CREATE INDEX IF NOT EXISTS idx_sales_date ON milk_sales(date DESC);
+      CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses(date DESC);
+      CREATE INDEX IF NOT EXISTS idx_rates_date ON milk_rates(date DESC);
+      CREATE INDEX IF NOT EXISTS idx_investments_date ON partner_investments(date DESC);
+      CREATE INDEX IF NOT EXISTS idx_waste_date ON product_waste(date DESC);
     `);
   }
 
@@ -306,6 +386,20 @@ export async function initDatabase() {
       'INSERT INTO users (username, password, name, role) VALUES (?, ?, ?, ?)',
       ['demo', hashedPassword, 'DairyPureOrganic Admin', 'admin']
     );
+  }
+
+  // Seed 4 Business Partners if empty
+  const partnerCheck = await query('SELECT COUNT(*) as count FROM partners');
+  if (parseInt(partnerCheck.rows[0].count, 10) === 0) {
+    const defaultPartners = [
+      ['Partner 1 (Md. Imran Hossain)', '+880 1712-281861', 'Managing Partner (২৫%)'],
+      ['Partner 2', '+880 1700-000001', 'Partner / Investor (২৫%)'],
+      ['Partner 3', '+880 1700-000002', 'Partner / Investor (২৫%)'],
+      ['Partner 4', '+880 1700-000003', 'Partner / Investor (২৫%)']
+    ];
+    for (const [pName, pPhone, pRole] of defaultPartners) {
+      await query('INSERT INTO partners (name, phone, role) VALUES (?, ?, ?)', [pName, pPhone, pRole]);
+    }
   }
 
   // Seed default company settings

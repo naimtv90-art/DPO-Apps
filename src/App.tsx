@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { useApp } from './context/AppContext';
 import { Navbar } from './components/Navbar';
 import { Sidebar } from './components/Sidebar';
@@ -13,21 +13,39 @@ import { LoginModal } from './components/modals/LoginModal';
 import { AddPurchaseModal } from './components/modals/AddPurchaseModal';
 import { AddSaleModal } from './components/modals/AddSaleModal';
 import { AddExpenseModal } from './components/modals/AddExpenseModal';
+import { AddInvestmentModal } from './components/modals/AddInvestmentModal';
+import { AddWasteModal } from './components/modals/AddWasteModal';
 
-// Views
-import { DashboardView } from './views/DashboardView';
-import { AddPurchaseView } from './views/AddPurchaseView';
-import { PurchaseHistoryView } from './views/PurchaseHistoryView';
-import { AddSaleView } from './views/AddSaleView';
-import { SalesHistoryView } from './views/SalesHistoryView';
-import { StockView } from './views/StockView';
-import { RatesView } from './views/RatesView';
-import { DailySummaryView } from './views/DailySummaryView';
-import { ReportsView } from './views/ReportsView';
-import { ExpensesView } from './views/ExpensesView';
-import { CustomersView } from './views/CustomersView';
-import { SuppliersView } from './views/SuppliersView';
-import { SettingsView } from './views/SettingsView';
+// Code-split Lazy-Loaded Views for High-Speed Initial Load
+const DashboardView = lazy(() => import('./views/DashboardView').then(m => ({ default: m.DashboardView })));
+const AddPurchaseView = lazy(() => import('./views/AddPurchaseView').then(m => ({ default: m.AddPurchaseView })));
+const PurchaseHistoryView = lazy(() => import('./views/PurchaseHistoryView').then(m => ({ default: m.PurchaseHistoryView })));
+const AddSaleView = lazy(() => import('./views/AddSaleView').then(m => ({ default: m.AddSaleView })));
+const SalesHistoryView = lazy(() => import('./views/SalesHistoryView').then(m => ({ default: m.SalesHistoryView })));
+const StockView = lazy(() => import('./views/StockView').then(m => ({ default: m.StockView })));
+const WasteView = lazy(() => import('./views/WasteView').then(m => ({ default: m.WasteView })));
+const InvestmentsView = lazy(() => import('./views/InvestmentsView').then(m => ({ default: m.InvestmentsView })));
+const RatesView = lazy(() => import('./views/RatesView').then(m => ({ default: m.RatesView })));
+const DailySummaryView = lazy(() => import('./views/DailySummaryView').then(m => ({ default: m.DailySummaryView })));
+const ReportsView = lazy(() => import('./views/ReportsView').then(m => ({ default: m.ReportsView })));
+const ExpensesView = lazy(() => import('./views/ExpensesView').then(m => ({ default: m.ExpensesView })));
+const CustomersView = lazy(() => import('./views/CustomersView').then(m => ({ default: m.CustomersView })));
+const SuppliersView = lazy(() => import('./views/SuppliersView').then(m => ({ default: m.SuppliersView })));
+const SettingsView = lazy(() => import('./views/SettingsView').then(m => ({ default: m.SettingsView })));
+
+// Sleek Skeleton View Loader
+const ViewLoadingSkeleton: React.FC = () => (
+  <div className="space-y-6 animate-pulse">
+    <div className="h-36 rounded-3xl bg-slate-200 dark:bg-slate-800/60 w-full" />
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="h-28 rounded-3xl bg-slate-200 dark:bg-slate-800/60" />
+      <div className="h-28 rounded-3xl bg-slate-200 dark:bg-slate-800/60" />
+      <div className="h-28 rounded-3xl bg-slate-200 dark:bg-slate-800/60" />
+      <div className="h-28 rounded-3xl bg-slate-200 dark:bg-slate-800/60" />
+    </div>
+    <div className="h-64 rounded-3xl bg-slate-200 dark:bg-slate-800/60 w-full" />
+  </div>
+);
 
 export const AppContent: React.FC = () => {
   const { user, activeView, activeModal, closeModal, triggerRefresh } = useApp();
@@ -50,6 +68,10 @@ export const AppContent: React.FC = () => {
         return <SalesHistoryView />;
       case 'inventory':
         return <StockView />;
+      case 'waste':
+        return <WasteView />;
+      case 'investments':
+        return <InvestmentsView />;
       case 'rates':
         return <RatesView />;
       case 'daily-summary':
@@ -84,9 +106,11 @@ export const AppContent: React.FC = () => {
         {/* Left Sidebar (Desktop) */}
         <Sidebar />
 
-        {/* Dynamic Main Workspace Content */}
+        {/* Dynamic Main Workspace Content with Fast Suspense Code-Splitting */}
         <main className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8 pb-24 lg:pb-8 overflow-y-auto">
-          {renderActiveView()}
+          <Suspense fallback={<ViewLoadingSkeleton />}>
+            {renderActiveView()}
+          </Suspense>
         </main>
       </div>
 
@@ -121,6 +145,22 @@ export const AppContent: React.FC = () => {
 
       {activeModal?.type === 'ADD_EXPENSE' && (
         <AddExpenseModal
+          isOpen={true}
+          onClose={closeModal}
+          onSuccess={triggerRefresh}
+        />
+      )}
+
+      {activeModal?.type === 'ADD_INVESTMENT' && (
+        <AddInvestmentModal
+          isOpen={true}
+          onClose={closeModal}
+          onSuccess={triggerRefresh}
+        />
+      )}
+
+      {activeModal?.type === 'ADD_WASTE' && (
+        <AddWasteModal
           isOpen={true}
           onClose={closeModal}
           onSuccess={triggerRefresh}

@@ -32,8 +32,11 @@ dist-ssr
 # SQLite database local files
 server/*.db
 server/*.sqlite
+server/*.sqlite-shm
+server/*.sqlite-wal
 server/*.db-journal
 server/*.sqlite-journal
 server/milk_manager.db
 server/uploads/*
 !server/uploads/.gitkeep
+

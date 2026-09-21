@@ -14,7 +14,9 @@ import {
   Settings as SettingsIcon,
   PlusCircle,
   History,
-  FileText
+  FileText,
+  Trash2,
+  Briefcase
 } from 'lucide-react';
 
 interface NavItem {
@@ -56,6 +58,17 @@ export const Sidebar: React.FC = () => {
       id: 'inventory',
       label: 'Milk Stock',
       icon: <Boxes className="w-5 h-5 text-amber-500" />,
+    },
+    {
+      id: 'waste',
+      label: 'Product Waste',
+      icon: <Trash2 className="w-5 h-5 text-orange-500" />,
+    },
+    {
+      id: 'investments',
+      label: 'Partner Invest',
+      icon: <Briefcase className="w-5 h-5 text-blue-500" />,
+      badge: '4 Partners',
     },
     {
       id: 'rates',

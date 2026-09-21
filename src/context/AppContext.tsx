@@ -9,6 +9,8 @@ export type NavView =
   | 'add-sale'
   | 'sales-history'
   | 'inventory'
+  | 'waste'
+  | 'investments'
   | 'rates'
   | 'daily-summary'
   | 'reports'

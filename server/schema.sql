@@ -99,6 +99,39 @@ CREATE TABLE IF NOT EXISTS stock_movements (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS partners (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(255) NOT NULL,
+  phone VARCHAR(50),
+  role VARCHAR(100) DEFAULT 'Partner / Shareholder',
+  notes TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS partner_investments (
+  id SERIAL PRIMARY KEY,
+  partner_name VARCHAR(255) NOT NULL,
+  partner_id INTEGER REFERENCES partners(id) ON DELETE SET NULL,
+  amount NUMERIC(12, 2) NOT NULL CHECK (amount > 0),
+  date DATE NOT NULL,
+  investment_type VARCHAR(100) DEFAULT 'Capital Investment',
+  payment_method VARCHAR(100) DEFAULT 'Bank Transfer',
+  notes TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS product_waste (
+  id SERIAL PRIMARY KEY,
+  date DATE NOT NULL,
+  product_name VARCHAR(255) DEFAULT 'Raw Milk',
+  quantity NUMERIC(12, 2) NOT NULL CHECK (quantity > 0),
+  unit VARCHAR(20) DEFAULT 'Liter',
+  reason VARCHAR(100) NOT NULL,
+  estimated_loss NUMERIC(12, 2) NOT NULL,
+  notes TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Performance Indexes
 CREATE INDEX IF NOT EXISTS idx_purchases_date ON milk_purchases(date DESC);
 CREATE INDEX IF NOT EXISTS idx_sales_date ON milk_sales(date DESC);
@@ -106,3 +139,7 @@ CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses(date DESC);
 CREATE INDEX IF NOT EXISTS idx_rates_date ON milk_rates(date DESC);
 CREATE INDEX IF NOT EXISTS idx_purchases_supplier ON milk_purchases(supplier_id);
 CREATE INDEX IF NOT EXISTS idx_sales_customer ON milk_sales(customer_id);
+CREATE INDEX IF NOT EXISTS idx_investments_date ON partner_investments(date DESC);
+CREATE INDEX IF NOT EXISTS idx_investments_partner ON partner_investments(partner_name);
+CREATE INDEX IF NOT EXISTS idx_waste_date ON product_waste(date DESC);
+

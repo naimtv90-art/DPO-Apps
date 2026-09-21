@@ -274,6 +274,98 @@ export const api = {
     return handleResponse(res);
   },
 
+  // Product Waste
+  getWaste: async (params?: { startDate?: string; endDate?: string; reason?: string; search?: string }): Promise<{ waste: ProductWaste[]; summary: WasteSummary; reasonTotals: WasteReasonTotal[] }> => {
+    const searchParams = new URLSearchParams();
+    if (params?.startDate) searchParams.append('startDate', params.startDate);
+    if (params?.endDate) searchParams.append('endDate', params.endDate);
+    if (params?.reason) searchParams.append('reason', params.reason);
+    if (params?.search) searchParams.append('search', params.search);
+    const res = await fetch(`${BASE_URL}/waste?${searchParams.toString()}`);
+    return handleResponse(res);
+  },
+
+  createWaste: async (data: Partial<ProductWaste>): Promise<{ message: string; waste: ProductWaste; stock: number }> => {
+    const res = await fetch(`${BASE_URL}/waste`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    return handleResponse(res);
+  },
+
+  updateWaste: async (id: number, data: Partial<ProductWaste>): Promise<{ message: string }> => {
+    const res = await fetch(`${BASE_URL}/waste/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    return handleResponse(res);
+  },
+
+  deleteWaste: async (id: number): Promise<{ message: string; stock: number }> => {
+    const res = await fetch(`${BASE_URL}/waste/${id}`, { method: 'DELETE' });
+    return handleResponse(res);
+  },
+
+  // Partner Investments
+  getInvestments: async (params?: { partner?: string; startDate?: string; endDate?: string; search?: string }): Promise<{ investments: PartnerInvestment[]; totalInvested: number; count: number; partnerSummaries: PartnerSummary[] }> => {
+    const searchParams = new URLSearchParams();
+    if (params?.partner) searchParams.append('partner', params.partner);
+    if (params?.startDate) searchParams.append('startDate', params.startDate);
+    if (params?.endDate) searchParams.append('endDate', params.endDate);
+    if (params?.search) searchParams.append('search', params.search);
+    const res = await fetch(`${BASE_URL}/investments?${searchParams.toString()}`);
+    return handleResponse(res);
+  },
+
+  createInvestment: async (data: Partial<PartnerInvestment>): Promise<{ message: string; investment: PartnerInvestment }> => {
+    const res = await fetch(`${BASE_URL}/investments`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    return handleResponse(res);
+  },
+
+  updateInvestment: async (id: number, data: Partial<PartnerInvestment>): Promise<{ message: string }> => {
+    const res = await fetch(`${BASE_URL}/investments/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    return handleResponse(res);
+  },
+
+  deleteInvestment: async (id: number): Promise<{ message: string }> => {
+    const res = await fetch(`${BASE_URL}/investments/${id}`, { method: 'DELETE' });
+    return handleResponse(res);
+  },
+
+  // Partners Directory
+  getPartners: async (): Promise<{ partners: Partner[]; totalCapital: number }> => {
+    const res = await fetch(`${BASE_URL}/partners`);
+    return handleResponse(res);
+  },
+
+  createPartner: async (data: Partial<Partner>): Promise<{ message: string; id: number }> => {
+    const res = await fetch(`${BASE_URL}/partners`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    return handleResponse(res);
+  },
+
+  updatePartner: async (id: number, data: Partial<Partner>): Promise<{ message: string }> => {
+    const res = await fetch(`${BASE_URL}/partners/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    return handleResponse(res);
+  },
+
   // Settings
   getSettings: async (): Promise<{ settings: AppSettings }> => {
     const res = await fetch(`${BASE_URL}/settings`);

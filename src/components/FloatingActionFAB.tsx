@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Plus, X, ShoppingBag, ShoppingCart, Receipt } from 'lucide-react';
+import { Plus, X, ShoppingBag, ShoppingCart, Receipt, Trash2, Briefcase } from 'lucide-react';
 
 export const FloatingActionFAB: React.FC = () => {
   const { openModal } = useApp();
@@ -15,9 +15,31 @@ export const FloatingActionFAB: React.FC = () => {
           <button
             onClick={() => {
               setIsOpen(false);
+              openModal('ADD_INVESTMENT');
+            }}
+            className="flex items-center gap-2.5 px-4 py-2 rounded-full bg-blue-600 text-white font-semibold text-xs shadow-lg shadow-blue-600/30 active:scale-95 transition"
+          >
+            <span>+ Investment</span>
+            <Briefcase className="w-4 h-4" />
+          </button>
+
+          <button
+            onClick={() => {
+              setIsOpen(false);
+              openModal('ADD_WASTE');
+            }}
+            className="flex items-center gap-2.5 px-4 py-2 rounded-full bg-amber-600 text-white font-semibold text-xs shadow-lg shadow-amber-600/30 active:scale-95 transition"
+          >
+            <span>+ Log Waste</span>
+            <Trash2 className="w-4 h-4" />
+          </button>
+
+          <button
+            onClick={() => {
+              setIsOpen(false);
               openModal('ADD_PURCHASE');
             }}
-            className="flex items-center gap-2.5 px-4 py-2.5 rounded-full bg-emerald-600 text-white font-semibold text-xs shadow-lg shadow-emerald-600/30 active:scale-95 transition"
+            className="flex items-center gap-2.5 px-4 py-2 rounded-full bg-emerald-600 text-white font-semibold text-xs shadow-lg shadow-emerald-600/30 active:scale-95 transition"
           >
             <span>Add Purchase</span>
             <ShoppingBag className="w-4 h-4" />
@@ -28,7 +50,7 @@ export const FloatingActionFAB: React.FC = () => {
               setIsOpen(false);
               openModal('ADD_SALE');
             }}
-            className="flex items-center gap-2.5 px-4 py-2.5 rounded-full bg-sky-600 text-white font-semibold text-xs shadow-lg shadow-sky-600/30 active:scale-95 transition"
+            className="flex items-center gap-2.5 px-4 py-2 rounded-full bg-sky-600 text-white font-semibold text-xs shadow-lg shadow-sky-600/30 active:scale-95 transition"
           >
             <span>Add Sale</span>
             <ShoppingCart className="w-4 h-4" />
@@ -39,7 +61,7 @@ export const FloatingActionFAB: React.FC = () => {
               setIsOpen(false);
               openModal('ADD_EXPENSE');
             }}
-            className="flex items-center gap-2.5 px-4 py-2.5 rounded-full bg-rose-600 text-white font-semibold text-xs shadow-lg shadow-rose-600/30 active:scale-95 transition"
+            className="flex items-center gap-2.5 px-4 py-2 rounded-full bg-rose-600 text-white font-semibold text-xs shadow-lg shadow-rose-600/30 active:scale-95 transition"
           >
             <span>Add Expense</span>
             <Receipt className="w-4 h-4" />

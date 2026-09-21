@@ -183,7 +183,7 @@ export const DashboardView: React.FC = () => {
           </span>
         </div>
 
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
           
           {/* Card 1: Today's Purchase */}
           <div 
@@ -233,14 +233,38 @@ export const DashboardView: React.FC = () => {
             </div>
           </div>
 
-          {/* Card 3: Current Milk Stock */}
+          {/* Card 3: Today's Waste */}
           <div 
-            onClick={() => setActiveView('inventory')}
+            onClick={() => setActiveView('waste')}
             className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-amber-400 dark:hover:border-amber-600 transition cursor-pointer group"
           >
             <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-xs font-semibold">
-              <span>Current Stock</span>
+              <span>Today's Waste</span>
               <div className="p-2 rounded-xl bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 group-hover:scale-110 transition-transform">
+                <Boxes className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="mt-2">
+              <span className="text-2xl sm:text-3xl font-black text-rose-600 dark:text-rose-400 tabular-nums">
+                {(stats.today.wasteQty || 0).toFixed(1)} <span className="text-sm font-semibold text-slate-400">{settings.default_unit || 'L'}</span>
+              </span>
+            </div>
+            <div className="mt-2 flex items-center justify-between text-xs pt-2 border-t border-slate-100 dark:border-slate-800">
+              <span className="text-slate-400">Est. Loss:</span>
+              <span className="font-bold text-slate-800 dark:text-slate-200 tabular-nums">
+                {formatCurrency(stats.today.wasteLoss || 0)}
+              </span>
+            </div>
+          </div>
+
+          {/* Card 4: Current Milk Stock */}
+          <div 
+            onClick={() => setActiveView('inventory')}
+            className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-emerald-400 dark:hover:border-emerald-600 transition cursor-pointer group"
+          >
+            <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-xs font-semibold">
+              <span>Current Stock</span>
+              <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 group-hover:scale-110 transition-transform">
                 <Boxes className="w-4 h-4" />
               </div>
             </div>
@@ -248,22 +272,22 @@ export const DashboardView: React.FC = () => {
               <span className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tabular-nums">
                 {stats.currentStock.toFixed(1)} <span className="text-sm font-semibold text-slate-400">{settings.default_unit || 'L'}</span>
               </span>
-              <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-950/80 px-1.5 py-0.5 rounded">
-                In Tank
+              <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-950/80 px-1.5 py-0.5 rounded">
+                Tank
               </span>
             </div>
             <div className="mt-2 flex items-center justify-between text-xs pt-2 border-t border-slate-100 dark:border-slate-800">
-              <span className="text-slate-400">Today's Remaining:</span>
+              <span className="text-slate-400">Today Remaining:</span>
               <span className="font-bold text-slate-800 dark:text-slate-200 tabular-nums">
                 {stats.today.remaining} {settings.default_unit || 'L'}
               </span>
             </div>
           </div>
 
-          {/* Card 4: Today's Profit */}
+          {/* Card 5: Today's Profit */}
           <div 
             onClick={() => setActiveView('daily-summary')}
-            className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-emerald-400 dark:hover:border-emerald-600 transition cursor-pointer group"
+            className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-emerald-400 dark:hover:border-emerald-600 transition cursor-pointer group col-span-2 sm:col-span-1"
           >
             <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-xs font-semibold">
               <span>Today's Profit</span>
@@ -284,6 +308,39 @@ export const DashboardView: React.FC = () => {
             </div>
           </div>
 
+        </div>
+      </div>
+
+      {/* 4-PARTNER CAPITAL POOL BANNER */}
+      <div 
+        onClick={() => setActiveView('investments')}
+        className="p-4 sm:p-5 rounded-3xl bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50 dark:from-blue-950/40 dark:via-indigo-950/30 dark:to-purple-950/40 border border-blue-200/70 dark:border-blue-800/40 cursor-pointer hover:shadow-md transition group"
+      >
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="p-3 rounded-2xl bg-blue-600 text-white shadow-md shadow-blue-500/20 group-hover:scale-105 transition-transform">
+              <DollarSign className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="font-bold text-sm text-slate-900 dark:text-white">
+                  4 Partner Business Capital Pool (পার্টনারদের ইনভেস্টমেন্ট)
+                </h3>
+                <span className="px-2 py-0.5 text-[10px] font-bold bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-300 rounded-full">
+                  4 Partners
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                Total Capital Invested: <strong className="text-blue-700 dark:text-blue-300 font-bold">{formatCurrency(stats.allTime.totalInvestedCapital || 0)}</strong>
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-blue-600 dark:text-blue-400 group-hover:underline">
+              View Partner Shares & Ledger →
+            </span>
+          </div>
         </div>
       </div>
 
@@ -310,7 +367,7 @@ export const DashboardView: React.FC = () => {
           <p className="text-base font-bold text-emerald-600 dark:text-emerald-400 tabular-nums mt-0.5">
             {formatCurrency(stats.month.netProfit)}
           </p>
-          <span className="text-[10px] text-slate-400 block">After expenses</span>
+          <span className="text-[10px] text-slate-400 block">After expenses & waste</span>
         </div>
 
         <div className="p-3.5 rounded-2xl bg-slate-100/80 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60">

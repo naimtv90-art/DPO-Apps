@@ -27,6 +27,7 @@ export interface Customer {
   created_at?: string;
   total_qty?: number;
   total_spent?: number;
+  total_due?: number;
   order_count?: number;
 }
 
@@ -81,8 +82,71 @@ export interface Expense {
   created_at?: string;
 }
 
+// Product Waste & Spoilage Interface
+export interface ProductWaste {
+  id: number;
+  date: string;
+  product_name: string;
+  quantity: number;
+  unit: 'Liter' | 'KG';
+  reason: 'Curdled / Spoiled' | 'Spillage / Leakage' | 'Quality / Sour Milk' | 'Processing Loss' | 'Transit Loss' | 'Other' | string;
+  estimated_loss: number;
+  notes?: string;
+  created_at?: string;
+}
+
+export interface WasteSummary {
+  totalQty: number;
+  totalLoss: number;
+  count: number;
+  todayQty: number;
+  todayLoss: number;
+}
+
+export interface WasteReasonTotal {
+  reason: string;
+  quantity: number;
+  loss: number;
+  count: number;
+}
+
+// Partner & Capital Investment Interfaces
+export interface Partner {
+  id: number;
+  name: string;
+  phone?: string;
+  role?: string;
+  notes?: string;
+  total_invested?: number;
+  share_percentage?: number;
+  investment_count?: number;
+  created_at?: string;
+}
+
+export interface PartnerInvestment {
+  id: number;
+  partner_name: string;
+  partner_id?: number | null;
+  amount: number;
+  date: string;
+  investment_type: 'Capital Investment' | 'Working Capital' | 'Machinery/Equipment' | 'Reinvestment' | 'Other';
+  payment_method: 'Cash' | 'Bank Transfer' | 'bKash' | 'Nagad' | 'Rocket' | 'Cheque';
+  notes?: string;
+  created_at?: string;
+}
+
+export interface PartnerSummary {
+  id?: number;
+  name: string;
+  phone?: string;
+  role?: string;
+  total_invested: number;
+  share_percentage: number;
+  entry_count: number;
+}
+
 export interface StockMovement {
-  type: 'PURCHASE' | 'SALE';
+  type: 'PURCHASE' | 'SALE' | 'WASTE';
   id: number;
   date: string;
   party_name: string;
@@ -97,8 +161,11 @@ export interface StockData {
   availableStock: number;
   totalPurchased: number;
   totalSold: number;
+  totalWasted?: number;
+  totalWasteLoss?: number;
   todayPurchase: number;
   todaySale: number;
+  todayWaste?: number;
   todayRemaining: number;
   weightedAvgCost: number;
   movements: StockMovement[];
@@ -111,6 +178,8 @@ export interface ChartDataPoint {
   salesQty: number;
   salesRevenue: number;
   expenses: number;
+  wasteQty?: number;
+  wasteLoss?: number;
   grossProfit: number;
   netProfit: number;
   cogs: number;
@@ -124,6 +193,8 @@ export interface DashboardStats {
     salesQty: number;
     salesRevenue: number;
     expenses: number;
+    wasteQty?: number;
+    wasteLoss?: number;
     grossProfit: number;
     netProfit: number;
     cogs: number;
@@ -135,15 +206,18 @@ export interface DashboardStats {
     totalPurchaseCost: number;
     totalSold: number;
     totalSalesRevenue: number;
+    totalExpenses: number;
+    totalWasted?: number;
+    totalWasteLoss?: number;
     currentStock: number;
     weightedAvgCost: number;
-    cogs: number;
-    grossProfit: number;
-    totalExpenses: number;
-    netProfit: number;
+    totalCOGS: number;
+    totalGrossProfit: number;
+    totalNetProfit: number;
     grossMargin: number;
     profitPerLiter: number;
     avgSellingRate: number;
+    totalInvestedCapital?: number;
   };
   month: {
     purchaseQty: number;
@@ -151,14 +225,18 @@ export interface DashboardStats {
     salesQty: number;
     salesRevenue: number;
     expenses: number;
+    wasteQty?: number;
+    wasteLoss?: number;
     grossProfit: number;
     netProfit: number;
   };
   latestRate: MilkRate;
+  partnerInvestments?: { partner_name: string; total_invested: number; count: number }[];
   charts: ChartDataPoint[];
   recentPurchases: MilkPurchase[];
   recentSales: MilkSale[];
   recentExpenses: Expense[];
+  recentWaste?: ProductWaste[];
 }
 
 export interface DailySummaryRow {
@@ -167,6 +245,8 @@ export interface DailySummaryRow {
   purchaseCost: number;
   soldQty: number;
   salesRevenue: number;
+  wasteQty?: number;
+  wasteLoss?: number;
   remaining: number;
   avgPurchaseRate: number;
   avgSellingRate: number;
@@ -187,6 +267,7 @@ export interface ReportData {
     openingStock: number;
     purchased: number;
     sold: number;
+    wasted?: number;
     closingStock: number;
   };
   purchaseSummary: {
@@ -201,12 +282,18 @@ export interface ReportData {
     avgRate: number;
     orderCount: number;
   };
+  wasteSummary?: {
+    totalQty: number;
+    totalLoss: number;
+    count: number;
+  };
   profitSummary: {
     cogs: number;
     grossProfit: number;
     grossMargin: number;
     profitPerLiter: number;
     expenses: number;
+    wasteLoss?: number;
     netProfit: number;
   };
   expenseBreakdown: { category: string; amount: number; count: number }[];
@@ -216,6 +303,8 @@ export interface ReportData {
     purchaseCost: number;
     soldQty: number;
     salesRevenue: number;
+    wasteQty?: number;
+    wasteLoss?: number;
     cogs: number;
     grossProfit: number;
     expenses: number;

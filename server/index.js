@@ -36,6 +36,28 @@ if (fs.existsSync(distPath)) {
   app.use(express.static(distPath));
 }
 
+// Universal Date Normalizer (Handles JS Date Objects, ISO Strings, SQLite and PG strings)
+function normalizeDate(val) {
+  if (!val) return '';
+  if (val instanceof Date) {
+    const y = val.getFullYear();
+    const m = String(val.getMonth() + 1).padStart(2, '0');
+    const d = String(val.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+  const str = String(val);
+  if (str.includes('T')) return str.split('T')[0];
+  if (/^\d{4}-\d{2}-\d{2}/.test(str)) return str.substring(0, 10);
+  const parsed = new Date(str);
+  if (!isNaN(parsed.getTime())) {
+    const y = parsed.getFullYear();
+    const m = String(parsed.getMonth() + 1).padStart(2, '0');
+    const d = String(parsed.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+  return str.substring(0, 10);
+}
+
 // Helper: Calculate Inventory Metrics & Weighted Average Cost
 async function getInventoryMetrics() {
   const purchaseRes = await query(`
@@ -57,17 +79,27 @@ async function getInventoryMetrics() {
     FROM expenses
   `);
 
-  const totalPurchased = parseFloat(purchaseRes.rows[0].total_purchased) || 0;
-  const totalPurchaseCost = parseFloat(purchaseRes.rows[0].total_purchase_cost) || 0;
-  const totalSold = parseFloat(salesRes.rows[0].total_sold) || 0;
-  const totalSalesRevenue = parseFloat(salesRes.rows[0].total_sales_revenue) || 0;
-  const totalExpenses = parseFloat(expenseRes.rows[0].total_expenses) || 0;
+  const wasteRes = await query(`
+    SELECT 
+      COALESCE(SUM(quantity), 0) as total_wasted,
+      COALESCE(SUM(estimated_loss), 0) as total_waste_loss
+    FROM product_waste
+  `);
 
-  const currentStock = Math.max(0, totalPurchased - totalSold);
+  const totalPurchased = parseFloat(purchaseRes.rows[0]?.total_purchased) || 0;
+  const totalPurchaseCost = parseFloat(purchaseRes.rows[0]?.total_purchase_cost) || 0;
+  const totalSold = parseFloat(salesRes.rows[0]?.total_sold) || 0;
+  const totalSalesRevenue = parseFloat(salesRes.rows[0]?.total_sales_revenue) || 0;
+  const totalExpenses = parseFloat(expenseRes.rows[0]?.total_expenses) || 0;
+  const totalWasted = parseFloat(wasteRes.rows[0]?.total_wasted) || 0;
+  const totalWasteLoss = parseFloat(wasteRes.rows[0]?.total_waste_loss) || 0;
+
+  // Real available tank stock deducting both sales and recorded waste
+  const currentStock = Math.max(0, totalPurchased - totalSold - totalWasted);
   const weightedAvgCost = totalPurchased > 0 ? (totalPurchaseCost / totalPurchased) : 0;
   const cogs = totalSold * weightedAvgCost;
   const grossProfit = totalSalesRevenue - cogs;
-  const netProfit = grossProfit - totalExpenses;
+  const netProfit = grossProfit - totalExpenses - totalWasteLoss;
   const grossMargin = totalSalesRevenue > 0 ? ((grossProfit / totalSalesRevenue) * 100) : 0;
   const profitPerLiter = totalSold > 0 ? (grossProfit / totalSold) : 0;
   const avgSellingRate = totalSold > 0 ? (totalSalesRevenue / totalSold) : 0;
@@ -77,11 +109,13 @@ async function getInventoryMetrics() {
     totalPurchaseCost,
     totalSold,
     totalSalesRevenue,
+    totalExpenses,
+    totalWasted,
+    totalWasteLoss,
     currentStock,
     weightedAvgCost,
     cogs,
     grossProfit,
-    totalExpenses,
     netProfit,
     grossMargin,
     profitPerLiter,
@@ -141,38 +175,29 @@ app.get('/api/auth/me', async (req, res) => {
   }
 });
 
-// Universal Date Normalizer (Handles JS Date Objects, ISO Strings, SQLite and PG strings)
-function normalizeDate(val) {
-  if (!val) return '';
-  if (val instanceof Date) {
-    const y = val.getFullYear();
-    const m = String(val.getMonth() + 1).padStart(2, '0');
-    const d = String(val.getDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
-  }
-  const str = String(val);
-  if (str.includes('T')) return str.split('T')[0];
-  if (/^\d{4}-\d{2}-\d{2}/.test(str)) return str.substring(0, 10);
-  const parsed = new Date(str);
-  if (!isNaN(parsed.getTime())) {
-    const y = parsed.getFullYear();
-    const m = String(parsed.getMonth() + 1).padStart(2, '0');
-    const d = String(parsed.getDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
-  }
-  return str.substring(0, 10);
-}
-
 // ---------------- DASHBOARD API ----------------
 app.get('/api/dashboard/stats', async (req, res) => {
   try {
     const today = normalizeDate(new Date());
     const currentYearMonth = today.substring(0, 7); // e.g. '2026-09'
 
-    const allPurchasesRes = await query('SELECT * FROM milk_purchases ORDER BY date DESC, id DESC');
-    const allSalesRes = await query('SELECT * FROM milk_sales ORDER BY date DESC, id DESC');
-    const allExpensesRes = await query('SELECT * FROM expenses ORDER BY date DESC, id DESC');
-    const latestRateRes = await query('SELECT * FROM milk_rates ORDER BY date DESC, id DESC LIMIT 1');
+    const [
+      allPurchasesRes,
+      allSalesRes,
+      allExpensesRes,
+      allWasteRes,
+      latestRateRes,
+      investmentsRes,
+      inventoryMetrics
+    ] = await Promise.all([
+      query('SELECT * FROM milk_purchases ORDER BY date DESC, id DESC'),
+      query('SELECT * FROM milk_sales ORDER BY date DESC, id DESC'),
+      query('SELECT * FROM expenses ORDER BY date DESC, id DESC'),
+      query('SELECT * FROM product_waste ORDER BY date DESC, id DESC'),
+      query('SELECT * FROM milk_rates ORDER BY date DESC, id DESC LIMIT 1'),
+      query('SELECT partner_name, SUM(amount) as total_invested, COUNT(*) as count FROM partner_investments GROUP BY partner_name'),
+      getInventoryMetrics()
+    ]);
 
     // Financial & Volume Accumulators
     let totalPurchased = 0;
@@ -180,18 +205,24 @@ app.get('/api/dashboard/stats', async (req, res) => {
     let totalSold = 0;
     let totalSalesRevenue = 0;
     let totalExpenses = 0;
+    let totalWasted = 0;
+    let totalWasteLoss = 0;
 
     let todayPurchaseQty = 0;
     let todayPurchaseCost = 0;
     let todaySalesQty = 0;
     let todaySalesRevenue = 0;
     let todayExpenseTotal = 0;
+    let todayWasteQty = 0;
+    let todayWasteLoss = 0;
 
     let monthPurchaseQty = 0;
     let monthPurchaseCost = 0;
     let monthSalesQty = 0;
     let monthSalesRevenue = 0;
     let monthExpenseTotal = 0;
+    let monthWasteQty = 0;
+    let monthWasteLoss = 0;
 
     const dateMap = {};
 
@@ -212,7 +243,7 @@ app.get('/api/dashboard/stats', async (req, res) => {
         monthPurchaseCost += c;
       }
 
-      if (!dateMap[d]) dateMap[d] = { date: d, purchaseQty: 0, purchaseCost: 0, salesQty: 0, salesRevenue: 0, expenses: 0 };
+      if (!dateMap[d]) dateMap[d] = { date: d, purchaseQty: 0, purchaseCost: 0, salesQty: 0, salesRevenue: 0, expenses: 0, wasteQty: 0, wasteLoss: 0 };
       dateMap[d].purchaseQty += q;
       dateMap[d].purchaseCost += c;
     }
@@ -234,7 +265,7 @@ app.get('/api/dashboard/stats', async (req, res) => {
         monthSalesRevenue += r;
       }
 
-      if (!dateMap[d]) dateMap[d] = { date: d, purchaseQty: 0, purchaseCost: 0, salesQty: 0, salesRevenue: 0, expenses: 0 };
+      if (!dateMap[d]) dateMap[d] = { date: d, purchaseQty: 0, purchaseCost: 0, salesQty: 0, salesRevenue: 0, expenses: 0, wasteQty: 0, wasteLoss: 0 };
       dateMap[d].salesQty += q;
       dateMap[d].salesRevenue += r;
     }
@@ -252,32 +283,54 @@ app.get('/api/dashboard/stats', async (req, res) => {
         monthExpenseTotal += a;
       }
 
-      if (!dateMap[d]) dateMap[d] = { date: d, purchaseQty: 0, purchaseCost: 0, salesQty: 0, salesRevenue: 0, expenses: 0 };
+      if (!dateMap[d]) dateMap[d] = { date: d, purchaseQty: 0, purchaseCost: 0, salesQty: 0, salesRevenue: 0, expenses: 0, wasteQty: 0, wasteLoss: 0 };
       dateMap[d].expenses += a;
     }
 
-    const currentStock = Math.max(0, totalPurchased - totalSold);
-    const weightedAvgCost = totalPurchased > 0 ? (totalPurchaseCost / totalPurchased) : 0;
+    for (const w of allWasteRes.rows) {
+      const q = parseFloat(w.quantity) || 0;
+      const l = parseFloat(w.estimated_loss) || 0;
+      const d = normalizeDate(w.date);
+
+      totalWasted += q;
+      totalWasteLoss += l;
+
+      if (d === today) {
+        todayWasteQty += q;
+        todayWasteLoss += l;
+      }
+      if (d.startsWith(currentYearMonth)) {
+        monthWasteQty += q;
+        monthWasteLoss += l;
+      }
+
+      if (!dateMap[d]) dateMap[d] = { date: d, purchaseQty: 0, purchaseCost: 0, salesQty: 0, salesRevenue: 0, expenses: 0, wasteQty: 0, wasteLoss: 0 };
+      dateMap[d].wasteQty += q;
+      dateMap[d].wasteLoss += l;
+    }
+
+    const currentStock = inventoryMetrics.currentStock;
+    const weightedAvgCost = inventoryMetrics.weightedAvgCost;
     const totalCOGS = totalSold * weightedAvgCost;
     const totalGrossProfit = totalSalesRevenue - totalCOGS;
-    const totalNetProfit = totalGrossProfit - totalExpenses;
+    const totalNetProfit = totalGrossProfit - totalExpenses - totalWasteLoss;
     const grossMargin = totalSalesRevenue > 0 ? ((totalGrossProfit / totalSalesRevenue) * 100) : 0;
-    const profitPerLiter = totalSold > 0 ? (totalGrossProfit / totalSold) : 0;
+    const profitPerLiter = totalSold > 0 ? (grossProfit / totalSold) : 0;
     const avgSellingRate = totalSold > 0 ? (totalSalesRevenue / totalSold) : 0;
 
     const todayCOGS = todaySalesQty * weightedAvgCost;
     const todayGrossProfit = todaySalesRevenue - todayCOGS;
-    const todayNetProfit = todayGrossProfit - todayExpenseTotal;
-    const todayRemaining = todayPurchaseQty - todaySalesQty;
+    const todayNetProfit = todayGrossProfit - todayExpenseTotal - todayWasteLoss;
+    const todayRemaining = todayPurchaseQty - todaySalesQty - todayWasteQty;
 
     const monthCOGS = monthSalesQty * weightedAvgCost;
     const monthGrossProfit = monthSalesRevenue - monthCOGS;
-    const monthNetProfit = monthGrossProfit - monthExpenseTotal;
+    const monthNetProfit = monthGrossProfit - monthExpenseTotal - monthWasteLoss;
 
     const formattedCharts = Object.values(dateMap).sort((a, b) => a.date.localeCompare(b.date)).map(row => {
       const cogs = row.salesQty * weightedAvgCost;
       const grossProfit = row.salesRevenue - cogs;
-      const netProfit = grossProfit - row.expenses;
+      const netProfit = grossProfit - row.expenses - (row.wasteLoss || 0);
       return {
         ...row,
         grossProfit: Math.round(grossProfit),
@@ -285,6 +338,14 @@ app.get('/api/dashboard/stats', async (req, res) => {
         cogs: Math.round(cogs)
       };
     });
+
+    // Partner Investments summary for dashboard
+    const partnerInvestments = investmentsRes.rows.map(r => ({
+      partner_name: r.partner_name,
+      total_invested: parseFloat(r.total_invested) || 0,
+      count: parseInt(r.count, 10) || 0
+    }));
+    const totalInvestedCapital = partnerInvestments.reduce((sum, p) => sum + p.total_invested, 0);
 
     res.json({
       today: {
@@ -294,6 +355,8 @@ app.get('/api/dashboard/stats', async (req, res) => {
         salesQty: todaySalesQty,
         salesRevenue: todaySalesRevenue,
         expenses: todayExpenseTotal,
+        wasteQty: todayWasteQty,
+        wasteLoss: todayWasteLoss,
         grossProfit: Math.round(todayGrossProfit),
         netProfit: Math.round(todayNetProfit),
         cogs: Math.round(todayCOGS),
@@ -305,15 +368,18 @@ app.get('/api/dashboard/stats', async (req, res) => {
         totalPurchaseCost,
         totalSold,
         totalSalesRevenue,
+        totalExpenses,
+        totalWasted,
+        totalWasteLoss,
         currentStock,
         weightedAvgCost,
         totalCOGS,
         totalGrossProfit,
-        totalExpenses,
         totalNetProfit,
         grossMargin,
         profitPerLiter,
-        avgSellingRate
+        avgSellingRate,
+        totalInvestedCapital
       },
       month: {
         purchaseQty: monthPurchaseQty,
@@ -321,10 +387,13 @@ app.get('/api/dashboard/stats', async (req, res) => {
         salesQty: monthSalesQty,
         salesRevenue: monthSalesRevenue,
         expenses: monthExpenseTotal,
+        wasteQty: monthWasteQty,
+        wasteLoss: monthWasteLoss,
         grossProfit: Math.round(monthGrossProfit),
         netProfit: Math.round(monthNetProfit),
       },
       latestRate: latestRateRes.rows[0] || { purchase_rate: 60, selling_rate: 85, unit: 'Liter' },
+      partnerInvestments,
       charts: formattedCharts,
       recentPurchases: allPurchasesRes.rows.slice(0, 5).map(p => ({
         ...p,
@@ -344,6 +413,12 @@ app.get('/api/dashboard/stats', async (req, res) => {
         ...e,
         date: normalizeDate(e.date),
         amount: parseFloat(e.amount) || 0
+      })),
+      recentWaste: allWasteRes.rows.slice(0, 5).map(w => ({
+        ...w,
+        date: normalizeDate(w.date),
+        quantity: parseFloat(w.quantity) || 0,
+        estimated_loss: parseFloat(w.estimated_loss) || 0
       }))
     });
   } catch (err) {
@@ -360,7 +435,7 @@ app.get('/api/purchases', async (req, res) => {
     const params = [];
 
     if (search) {
-      sql += ' AND (supplier_name ILIKE ? OR notes ILIKE ? OR supplier_phone ILIKE ?)';
+      sql += ' AND (supplier_name LIKE ? OR notes LIKE ? OR supplier_phone LIKE ?)';
       params.push(`%${search}%`, `%${search}%`, `%${search}%`);
     }
     if (startDate) {
@@ -470,10 +545,10 @@ app.put('/api/purchases/:id', async (req, res) => {
     if (isNaN(rate) || rate <= 0) return res.status(400).json({ error: 'Rate must be greater than 0' });
 
     const metrics = await getInventoryMetrics();
-    const hypotheticalStock = (metrics.totalPurchased - parseFloat(existing.quantity) + qty) - metrics.totalSold;
+    const hypotheticalStock = (metrics.totalPurchased - parseFloat(existing.quantity) + qty) - metrics.totalSold - metrics.totalWasted;
     if (hypotheticalStock < 0) {
       return res.status(400).json({ 
-        error: `Cannot reduce purchase quantity to ${qty} L because ${metrics.totalSold} L has already been sold. Remaining stock would become negative (${hypotheticalStock.toFixed(1)} L).` 
+        error: `Cannot reduce purchase quantity to ${qty} L because sold & wasted total exceeds remaining stock.` 
       });
     }
 
@@ -500,10 +575,10 @@ app.delete('/api/purchases/:id', async (req, res) => {
     const existing = existingRes.rows[0];
 
     const metrics = await getInventoryMetrics();
-    const hypotheticalStock = (metrics.totalPurchased - parseFloat(existing.quantity)) - metrics.totalSold;
+    const hypotheticalStock = (metrics.totalPurchased - parseFloat(existing.quantity)) - metrics.totalSold - metrics.totalWasted;
     if (hypotheticalStock < 0) {
       return res.status(400).json({ 
-        error: `Cannot delete this purchase of ${existing.quantity} L. Total sold is ${metrics.totalSold} L and deleting this purchase would cause stock to drop to ${hypotheticalStock.toFixed(1)} L.` 
+        error: `Cannot delete this purchase of ${existing.quantity} L. Deleting this purchase would cause current stock to drop to ${hypotheticalStock.toFixed(1)} L.` 
       });
     }
 
@@ -524,7 +599,7 @@ app.get('/api/sales', async (req, res) => {
     const params = [];
 
     if (search) {
-      sql += ' AND (customer_name ILIKE ? OR notes ILIKE ? OR customer_phone ILIKE ?)';
+      sql += ' AND (customer_name LIKE ? OR notes LIKE ? OR customer_phone LIKE ?)';
       params.push(`%${search}%`, `%${search}%`, `%${search}%`);
     }
     if (startDate) {
@@ -684,17 +759,351 @@ app.delete('/api/sales/:id', async (req, res) => {
   }
 });
 
+// ---------------- PRODUCT WASTE API ----------------
+app.get('/api/waste', async (req, res) => {
+  try {
+    const { startDate, endDate, reason, search } = req.query;
+    let sql = 'SELECT * FROM product_waste WHERE 1=1';
+    const params = [];
+
+    if (startDate) {
+      sql += ' AND date >= ?';
+      params.push(startDate);
+    }
+    if (endDate) {
+      sql += ' AND date <= ?';
+      params.push(endDate);
+    }
+    if (reason) {
+      sql += ' AND reason = ?';
+      params.push(reason);
+    }
+    if (search) {
+      sql += ' AND (reason LIKE ? OR notes LIKE ? OR product_name LIKE ?)';
+      params.push(`%${search}%`, `%${search}%`, `%${search}%`);
+    }
+
+    sql += ' ORDER BY date DESC, id DESC';
+    const result = await query(sql, params);
+
+    const wasteList = result.rows.map(w => ({
+      ...w,
+      date: normalizeDate(w.date),
+      quantity: parseFloat(w.quantity) || 0,
+      estimated_loss: parseFloat(w.estimated_loss) || 0
+    }));
+
+    const today = normalizeDate(new Date());
+    const todayWaste = wasteList.filter(w => w.date === today);
+
+    const summary = {
+      totalQty: wasteList.reduce((sum, w) => sum + w.quantity, 0),
+      totalLoss: wasteList.reduce((sum, w) => sum + w.estimated_loss, 0),
+      count: wasteList.length,
+      todayQty: todayWaste.reduce((sum, w) => sum + w.quantity, 0),
+      todayLoss: todayWaste.reduce((sum, w) => sum + w.estimated_loss, 0)
+    };
+
+    // Grouping by reason
+    const reasonMap = {};
+    for (const w of wasteList) {
+      if (!reasonMap[w.reason]) {
+        reasonMap[w.reason] = { reason: w.reason, quantity: 0, loss: 0, count: 0 };
+      }
+      reasonMap[w.reason].quantity += w.quantity;
+      reasonMap[w.reason].loss += w.estimated_loss;
+      reasonMap[w.reason].count += 1;
+    }
+    const reasonTotals = Object.values(reasonMap).sort((a, b) => b.quantity - a.quantity);
+
+    res.json({ waste: wasteList, summary, reasonTotals });
+  } catch (err) {
+    console.error('Error fetching waste data:', err);
+    res.status(500).json({ error: 'Failed to fetch product waste' });
+  }
+});
+
+app.post('/api/waste', async (req, res) => {
+  try {
+    const { date, product_name = 'Raw Milk', quantity, unit = 'Liter', reason, estimated_loss, notes } = req.body;
+
+    if (!date) return res.status(400).json({ error: 'Date is required' });
+    const qty = parseFloat(quantity);
+    if (isNaN(qty) || qty <= 0) return res.status(400).json({ error: 'Quantity must be greater than 0' });
+    if (!reason || !reason.trim()) return res.status(400).json({ error: 'Wastage reason is required' });
+
+    // Stock check
+    const metrics = await getInventoryMetrics();
+    if (qty > metrics.currentStock) {
+      return res.status(400).json({ 
+        error: `Insufficient stock to record waste. Only ${metrics.currentStock.toFixed(1)} ${unit} currently available.` 
+      });
+    }
+
+    // If estimated loss not supplied, compute based on weighted average cost or default rate
+    let loss = parseFloat(estimated_loss);
+    if (isNaN(loss) || loss <= 0) {
+      loss = qty * (metrics.weightedAvgCost > 0 ? metrics.weightedAvgCost : 60);
+    }
+
+    const insertResult = await query(`
+      INSERT INTO product_waste (date, product_name, quantity, unit, reason, estimated_loss, notes)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `, [date, product_name.trim(), qty, unit, reason.trim(), loss, notes || '']);
+
+    const updatedMetrics = await getInventoryMetrics();
+    res.status(201).json({
+      message: 'Product waste recorded successfully!',
+      waste: { id: insertResult.insertId, date, product_name, quantity: qty, unit, reason, estimated_loss: loss, notes },
+      stock: updatedMetrics.currentStock
+    });
+  } catch (err) {
+    console.error('Error adding waste:', err);
+    res.status(500).json({ error: 'Failed to record product waste' });
+  }
+});
+
+app.put('/api/waste/:id', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const existingRes = await query('SELECT * FROM product_waste WHERE id = ?', [id]);
+    if (existingRes.rows.length === 0) return res.status(404).json({ error: 'Waste record not found' });
+    const existing = existingRes.rows[0];
+
+    const { date, product_name, quantity, unit, reason, estimated_loss, notes } = req.body;
+    const qty = parseFloat(quantity);
+    if (isNaN(qty) || qty <= 0) return res.status(400).json({ error: 'Quantity must be greater than 0' });
+
+    const metrics = await getInventoryMetrics();
+    const availableStock = metrics.currentStock + parseFloat(existing.quantity);
+    if (qty > availableStock) {
+      return res.status(400).json({ 
+        error: `Insufficient stock. Available stock: ${availableStock.toFixed(1)} ${unit || existing.unit}` 
+      });
+    }
+
+    const loss = parseFloat(estimated_loss) || (qty * (metrics.weightedAvgCost > 0 ? metrics.weightedAvgCost : 60));
+
+    await query(`
+      UPDATE product_waste
+      SET date = ?, product_name = ?, quantity = ?, unit = ?, reason = ?, estimated_loss = ?, notes = ?
+      WHERE id = ?
+    `, [date || existing.date, product_name || existing.product_name, qty, unit || existing.unit, reason || existing.reason, loss, notes ?? existing.notes, id]);
+
+    res.json({ message: 'Product waste updated successfully' });
+  } catch (err) {
+    console.error('Error updating waste:', err);
+    res.status(500).json({ error: 'Failed to update waste record' });
+  }
+});
+
+app.delete('/api/waste/:id', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    await query('DELETE FROM product_waste WHERE id = ?', [id]);
+    const metrics = await getInventoryMetrics();
+    res.json({ message: 'Waste record deleted successfully', stock: metrics.currentStock });
+  } catch (err) {
+    console.error('Error deleting waste:', err);
+    res.status(500).json({ error: 'Failed to delete waste record' });
+  }
+});
+
+// ---------------- PARTNER INVESTMENTS API ----------------
+app.get('/api/investments', async (req, res) => {
+  try {
+    const { partner, startDate, endDate, search } = req.query;
+    let sql = 'SELECT * FROM partner_investments WHERE 1=1';
+    const params = [];
+
+    if (partner) {
+      sql += ' AND partner_name = ?';
+      params.push(partner);
+    }
+    if (startDate) {
+      sql += ' AND date >= ?';
+      params.push(startDate);
+    }
+    if (endDate) {
+      sql += ' AND date <= ?';
+      params.push(endDate);
+    }
+    if (search) {
+      sql += ' AND (partner_name LIKE ? OR notes LIKE ? OR investment_type LIKE ? OR payment_method LIKE ?)';
+      params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
+    }
+
+    sql += ' ORDER BY date DESC, id DESC';
+    const result = await query(sql, params);
+
+    const investments = result.rows.map(inv => ({
+      ...inv,
+      date: normalizeDate(inv.date),
+      amount: parseFloat(inv.amount) || 0
+    }));
+
+    const totalInvested = investments.reduce((sum, inv) => sum + inv.amount, 0);
+
+    // Fetch all registered partners
+    const partnersRes = await query('SELECT * FROM partners ORDER BY id ASC');
+    const partnersList = partnersRes.rows;
+
+    // Build breakdown for each partner
+    const partnerBreakdown = partnersList.map(p => {
+      const pInvestments = investments.filter(inv => inv.partner_name === p.name || inv.partner_id === p.id);
+      const pTotal = pInvestments.reduce((sum, inv) => sum + inv.amount, 0);
+      const percentage = totalInvested > 0 ? ((pTotal / totalInvested) * 100) : 0;
+      return {
+        id: p.id,
+        name: p.name,
+        phone: p.phone,
+        role: p.role,
+        total_invested: pTotal,
+        share_percentage: parseFloat(percentage.toFixed(2)),
+        entry_count: pInvestments.length
+      };
+    });
+
+    res.json({
+      investments,
+      totalInvested,
+      count: investments.length,
+      partnerSummaries: partnerBreakdown
+    });
+  } catch (err) {
+    console.error('Error fetching partner investments:', err);
+    res.status(500).json({ error: 'Failed to fetch investments' });
+  }
+});
+
+app.post('/api/investments', async (req, res) => {
+  try {
+    const { partner_name, partner_id, amount, date, investment_type = 'Capital Investment', payment_method = 'Bank Transfer', notes } = req.body;
+
+    if (!partner_name || !partner_name.trim()) return res.status(400).json({ error: 'Partner name is required' });
+    const amt = parseFloat(amount);
+    if (isNaN(amt) || amt <= 0) return res.status(400).json({ error: 'Valid investment amount is required' });
+    if (!date) return res.status(400).json({ error: 'Date is required' });
+
+    let pId = partner_id || null;
+    let pName = partner_name.trim();
+
+    if (!pId) {
+      const checkP = await query('SELECT id FROM partners WHERE LOWER(name) = LOWER(?)', [pName]);
+      if (checkP.rows.length > 0) {
+        pId = checkP.rows[0].id;
+      }
+    }
+
+    const insertResult = await query(`
+      INSERT INTO partner_investments (partner_name, partner_id, amount, date, investment_type, payment_method, notes)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `, [pName, pId, amt, date, investment_type, payment_method, notes || '']);
+
+    res.status(201).json({
+      message: 'Partner investment recorded successfully!',
+      investment: { id: insertResult.insertId, partner_name: pName, partner_id: pId, amount: amt, date, investment_type, payment_method, notes }
+    });
+  } catch (err) {
+    console.error('Error adding investment:', err);
+    res.status(500).json({ error: 'Failed to record investment' });
+  }
+});
+
+app.put('/api/investments/:id', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const { partner_name, partner_id, amount, date, investment_type, payment_method, notes } = req.body;
+    const amt = parseFloat(amount);
+    if (isNaN(amt) || amt <= 0) return res.status(400).json({ error: 'Valid investment amount is required' });
+
+    await query(`
+      UPDATE partner_investments
+      SET partner_name = ?, partner_id = ?, amount = ?, date = ?, investment_type = ?, payment_method = ?, notes = ?
+      WHERE id = ?
+    `, [partner_name, partner_id || null, amt, date, investment_type, payment_method, notes || '', id]);
+
+    res.json({ message: 'Investment updated successfully' });
+  } catch (err) {
+    console.error('Error updating investment:', err);
+    res.status(500).json({ error: 'Failed to update investment' });
+  }
+});
+
+app.delete('/api/investments/:id', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    await query('DELETE FROM partner_investments WHERE id = ?', [id]);
+    res.json({ message: 'Investment deleted successfully' });
+  } catch (err) {
+    console.error('Error deleting investment:', err);
+    res.status(500).json({ error: 'Failed to delete investment' });
+  }
+});
+
+// ---------------- PARTNERS DIRECTORY API ----------------
+app.get('/api/partners', async (req, res) => {
+  try {
+    const partnersRes = await query('SELECT * FROM partners ORDER BY id ASC');
+    const allInvestmentsRes = await query('SELECT partner_name, partner_id, amount FROM partner_investments');
+    
+    const totalCapital = allInvestmentsRes.rows.reduce((sum, inv) => sum + (parseFloat(inv.amount) || 0), 0);
+
+    const partners = partnersRes.rows.map(p => {
+      const pInvs = allInvestmentsRes.rows.filter(inv => inv.partner_id === p.id || inv.partner_name === p.name);
+      const pTotal = pInvs.reduce((sum, inv) => sum + (parseFloat(inv.amount) || 0), 0);
+      const percentage = totalCapital > 0 ? ((pTotal / totalCapital) * 100) : 0;
+      return {
+        ...p,
+        total_invested: pTotal,
+        share_percentage: parseFloat(percentage.toFixed(2)),
+        investment_count: pInvs.length
+      };
+    });
+
+    res.json({ partners, totalCapital });
+  } catch (err) {
+    console.error('Error fetching partners:', err);
+    res.status(500).json({ error: 'Failed to fetch partners' });
+  }
+});
+
+app.post('/api/partners', async (req, res) => {
+  try {
+    const { name, phone, role, notes } = req.body;
+    if (!name?.trim()) return res.status(400).json({ error: 'Partner name is required' });
+
+    const insertRes = await query('INSERT INTO partners (name, phone, role, notes) VALUES (?, ?, ?, ?)', [name.trim(), phone || '', role || 'Partner / Investor', notes || '']);
+    res.status(201).json({ message: 'Partner added successfully', id: insertRes.insertId });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to add partner' });
+  }
+});
+
+app.put('/api/partners/:id', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const { name, phone, role, notes } = req.body;
+    await query('UPDATE partners SET name = ?, phone = ?, role = ?, notes = ? WHERE id = ?', [name.trim(), phone || '', role || 'Partner / Investor', notes || '', id]);
+    res.json({ message: 'Partner updated successfully' });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update partner' });
+  }
+});
+
 // ---------------- STOCK API ----------------
 app.get('/api/stock', async (req, res) => {
   try {
     const metrics = await getInventoryMetrics();
-    const today = new Date().toISOString().split('T')[0];
+    const today = normalizeDate(new Date());
 
     const todayP = await query('SELECT COALESCE(SUM(quantity), 0) as qty FROM milk_purchases WHERE date = ?', [today]);
     const todayS = await query('SELECT COALESCE(SUM(quantity), 0) as qty FROM milk_sales WHERE date = ?', [today]);
+    const todayW = await query('SELECT COALESCE(SUM(quantity), 0) as qty FROM product_waste WHERE date = ?', [today]);
 
-    const todayPurchase = parseFloat(todayP.rows[0].qty) || 0;
-    const todaySale = parseFloat(todayS.rows[0].qty) || 0;
+    const todayPurchase = parseFloat(todayP.rows[0]?.qty) || 0;
+    const todaySale = parseFloat(todayS.rows[0]?.qty) || 0;
+    const todayWaste = parseFloat(todayW.rows[0]?.qty) || 0;
 
     const movementsRes = await query(`
       SELECT 
@@ -720,8 +1129,20 @@ app.get('/api/stock', async (req, res) => {
         total_sale as total_amount,
         created_at
       FROM milk_sales
+      UNION ALL
+      SELECT 
+        'WASTE' as type,
+        id,
+        date,
+        reason as party_name,
+        quantity,
+        unit,
+        0 as rate,
+        estimated_loss as total_amount,
+        created_at
+      FROM product_waste
       ORDER BY date DESC, created_at DESC
-      LIMIT 30
+      LIMIT 40
     `);
 
     const movements = movementsRes.rows.map(m => ({
@@ -736,9 +1157,12 @@ app.get('/api/stock', async (req, res) => {
       availableStock: metrics.currentStock,
       totalPurchased: metrics.totalPurchased,
       totalSold: metrics.totalSold,
+      totalWasted: metrics.totalWasted,
+      totalWasteLoss: metrics.totalWasteLoss,
       todayPurchase,
       todaySale,
-      todayRemaining: todayPurchase - todaySale,
+      todayWaste,
+      todayRemaining: todayPurchase - todaySale - todayWaste,
       weightedAvgCost: metrics.weightedAvgCost,
       movements
     });
@@ -792,68 +1216,96 @@ app.post('/api/rates', async (req, res) => {
   }
 });
 
-// ---------------- DAILY SUMMARY API ----------------
+// ---------------- DAILY SUMMARY API (High Performance Single Aggregates) ----------------
 app.get('/api/daily-summary', async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
-    let sql = `
-      WITH all_dates AS (
-        SELECT DISTINCT date FROM milk_purchases
-        UNION
-        SELECT DISTINCT date FROM milk_sales
-      )
-      SELECT d.date
-      FROM all_dates d
-      WHERE 1=1
-    `;
     const params = [];
+    let dateWhereP = 'WHERE 1=1';
+    let dateWhereS = 'WHERE 1=1';
+    let dateWhereE = 'WHERE 1=1';
+    let dateWhereW = 'WHERE 1=1';
+
     if (startDate) {
-      sql += ' AND d.date >= ?';
+      dateWhereP += ' AND date >= ?';
+      dateWhereS += ' AND date >= ?';
+      dateWhereE += ' AND date >= ?';
+      dateWhereW += ' AND date >= ?';
       params.push(startDate);
     }
     if (endDate) {
-      sql += ' AND d.date <= ?';
+      dateWhereP += ' AND date <= ?';
+      dateWhereS += ' AND date <= ?';
+      dateWhereE += ' AND date <= ?';
+      dateWhereW += ' AND date <= ?';
       params.push(endDate);
     }
-    sql += ' ORDER BY d.date DESC';
 
-    const dateRows = await query(sql, params);
-    const metrics = await getInventoryMetrics();
+    const [purchasesAgg, salesAgg, expensesAgg, wasteAgg, metrics] = await Promise.all([
+      query(`SELECT date, COALESCE(SUM(quantity), 0) as qty, COALESCE(SUM(total_cost), 0) as cost FROM milk_purchases ${dateWhereP} GROUP BY date`, params),
+      query(`SELECT date, COALESCE(SUM(quantity), 0) as qty, COALESCE(SUM(total_sale), 0) as revenue FROM milk_sales ${dateWhereS} GROUP BY date`, params),
+      query(`SELECT date, COALESCE(SUM(amount), 0) as total FROM expenses ${dateWhereE} GROUP BY date`, params),
+      query(`SELECT date, COALESCE(SUM(quantity), 0) as qty, COALESCE(SUM(estimated_loss), 0) as loss FROM product_waste ${dateWhereW} GROUP BY date`, params),
+      getInventoryMetrics()
+    ]);
 
-    const dailyData = await Promise.all(dateRows.rows.map(async ({ date }) => {
-      const p = await query('SELECT COALESCE(SUM(quantity), 0) as qty, COALESCE(SUM(total_cost), 0) as cost FROM milk_purchases WHERE date = ?', [date]);
-      const s = await query('SELECT COALESCE(SUM(quantity), 0) as qty, COALESCE(SUM(total_sale), 0) as revenue FROM milk_sales WHERE date = ?', [date]);
-      const exp = await query('SELECT COALESCE(SUM(amount), 0) as total FROM expenses WHERE date = ?', [date]);
+    const dateMap = {};
 
-      const pQty = parseFloat(p.rows[0].qty) || 0;
-      const pCost = parseFloat(p.rows[0].cost) || 0;
-      const sQty = parseFloat(s.rows[0].qty) || 0;
-      const sRev = parseFloat(s.rows[0].revenue) || 0;
-      const expTotal = parseFloat(exp.rows[0].total) || 0;
+    for (const r of purchasesAgg.rows) {
+      const d = normalizeDate(r.date);
+      if (!dateMap[d]) dateMap[d] = { date: d, purchasedQty: 0, purchaseCost: 0, soldQty: 0, salesRevenue: 0, expenses: 0, wasteQty: 0, wasteLoss: 0 };
+      dateMap[d].purchasedQty += parseFloat(r.qty) || 0;
+      dateMap[d].purchaseCost += parseFloat(r.cost) || 0;
+    }
 
-      const avgPurchaseRate = pQty > 0 ? (pCost / pQty) : 0;
-      const avgSellingRate = sQty > 0 ? (sRev / sQty) : 0;
-      const cogs = sQty * metrics.weightedAvgCost;
-      const grossProfit = sRev - cogs;
-      const netProfit = grossProfit - expTotal;
-      const remaining = pQty - sQty;
+    for (const r of salesAgg.rows) {
+      const d = normalizeDate(r.date);
+      if (!dateMap[d]) dateMap[d] = { date: d, purchasedQty: 0, purchaseCost: 0, soldQty: 0, salesRevenue: 0, expenses: 0, wasteQty: 0, wasteLoss: 0 };
+      dateMap[d].soldQty += parseFloat(r.qty) || 0;
+      dateMap[d].salesRevenue += parseFloat(r.revenue) || 0;
+    }
 
-      return {
-        date: normalizeDate(date),
-        purchasedQty: pQty,
-        purchaseCost: pCost,
-        soldQty: sQty,
-        salesRevenue: sRev,
-        remaining,
-        avgPurchaseRate,
-        avgSellingRate,
-        cogs: Math.round(cogs),
-        grossProfit: Math.round(grossProfit),
-        expenses: expTotal,
-        netProfit: Math.round(netProfit),
-        grossMargin: sRev > 0 ? ((grossProfit / sRev) * 100).toFixed(1) : '0.0'
-      };
-    }));
+    for (const r of expensesAgg.rows) {
+      const d = normalizeDate(r.date);
+      if (!dateMap[d]) dateMap[d] = { date: d, purchasedQty: 0, purchaseCost: 0, soldQty: 0, salesRevenue: 0, expenses: 0, wasteQty: 0, wasteLoss: 0 };
+      dateMap[d].expenses += parseFloat(r.total) || 0;
+    }
+
+    for (const r of wasteAgg.rows) {
+      const d = normalizeDate(r.date);
+      if (!dateMap[d]) dateMap[d] = { date: d, purchasedQty: 0, purchaseCost: 0, soldQty: 0, salesRevenue: 0, expenses: 0, wasteQty: 0, wasteLoss: 0 };
+      dateMap[d].wasteQty += parseFloat(r.qty) || 0;
+      dateMap[d].wasteLoss += parseFloat(r.loss) || 0;
+    }
+
+    const dailyData = Object.values(dateMap)
+      .sort((a, b) => b.date.localeCompare(a.date))
+      .map(row => {
+        const avgPurchaseRate = row.purchasedQty > 0 ? (row.purchaseCost / row.purchasedQty) : 0;
+        const avgSellingRate = row.soldQty > 0 ? (row.salesRevenue / row.soldQty) : 0;
+        const cogs = row.soldQty * metrics.weightedAvgCost;
+        const grossProfit = row.salesRevenue - cogs;
+        const netProfit = grossProfit - row.expenses - row.wasteLoss;
+        const remaining = row.purchasedQty - row.soldQty - row.wasteQty;
+
+        return {
+          date: row.date,
+          purchasedQty: row.purchasedQty,
+          purchaseCost: row.purchaseCost,
+          soldQty: row.soldQty,
+          salesRevenue: row.salesRevenue,
+          wasteQty: row.wasteQty,
+          wasteLoss: row.wasteLoss,
+          remaining,
+          avgPurchaseRate,
+          avgSellingRate,
+          cogs: Math.round(cogs),
+          grossProfit: Math.round(grossProfit),
+          expenses: row.expenses,
+          netProfit: Math.round(netProfit),
+          grossMargin: row.salesRevenue > 0 ? ((grossProfit / row.salesRevenue) * 100).toFixed(1) : '0.0'
+        };
+      });
 
     res.json({ dailyData });
   } catch (err) {
@@ -862,7 +1314,7 @@ app.get('/api/daily-summary', async (req, res) => {
   }
 });
 
-// ---------------- REPORTS API ----------------
+// ---------------- REPORTS API (High Performance Period Aggregates) ----------------
 app.get('/api/reports', async (req, res) => {
   try {
     const { type = 'monthly', startDate, endDate } = req.query;
@@ -892,74 +1344,113 @@ app.get('/api/reports', async (req, res) => {
       }
     }
 
-    const metrics = await getInventoryMetrics();
+    const [
+      metrics,
+      priorP,
+      priorS,
+      priorW,
+      periodP,
+      periodS,
+      periodW,
+      periodE,
+      expBreakdownRes,
+      purchasesBreakdown,
+      salesBreakdown,
+      expensesBreakdown,
+      wasteBreakdown
+    ] = await Promise.all([
+      getInventoryMetrics(),
+      query('SELECT COALESCE(SUM(quantity), 0) as qty FROM milk_purchases WHERE date < ?', [start]),
+      query('SELECT COALESCE(SUM(quantity), 0) as qty FROM milk_sales WHERE date < ?', [start]),
+      query('SELECT COALESCE(SUM(quantity), 0) as qty FROM product_waste WHERE date < ?', [start]),
+      query('SELECT COALESCE(SUM(quantity), 0) as total_qty, COALESCE(SUM(total_cost), 0) as total_cost, COUNT(*) as total_orders FROM milk_purchases WHERE date >= ? AND date <= ?', [start, end]),
+      query('SELECT COALESCE(SUM(quantity), 0) as total_qty, COALESCE(SUM(total_sale), 0) as total_revenue, COUNT(*) as total_orders FROM milk_sales WHERE date >= ? AND date <= ?', [start, end]),
+      query('SELECT COALESCE(SUM(quantity), 0) as total_qty, COALESCE(SUM(estimated_loss), 0) as total_loss, COUNT(*) as total_count FROM product_waste WHERE date >= ? AND date <= ?', [start, end]),
+      query('SELECT COALESCE(SUM(amount), 0) as total FROM expenses WHERE date >= ? AND date <= ?', [start, end]),
+      query('SELECT category, SUM(amount) as amount, COUNT(*) as count FROM expenses WHERE date >= ? AND date <= ? GROUP BY category ORDER BY amount DESC', [start, end]),
+      query('SELECT date, SUM(quantity) as qty, SUM(total_cost) as cost FROM milk_purchases WHERE date >= ? AND date <= ? GROUP BY date', [start, end]),
+      query('SELECT date, SUM(quantity) as qty, SUM(total_sale) as rev FROM milk_sales WHERE date >= ? AND date <= ? GROUP BY date', [start, end]),
+      query('SELECT date, SUM(amount) as exp FROM expenses WHERE date >= ? AND date <= ? GROUP BY date', [start, end]),
+      query('SELECT date, SUM(quantity) as qty, SUM(estimated_loss) as loss FROM product_waste WHERE date >= ? AND date <= ? GROUP BY date', [start, end])
+    ]);
 
-    const priorP = await query('SELECT COALESCE(SUM(quantity), 0) as qty FROM milk_purchases WHERE date < ?', [start]);
-    const priorS = await query('SELECT COALESCE(SUM(quantity), 0) as qty FROM milk_sales WHERE date < ?', [start]);
-    const openingStock = Math.max(0, (parseFloat(priorP.rows[0].qty) || 0) - (parseFloat(priorS.rows[0].qty) || 0));
+    const openingStock = Math.max(0, 
+      (parseFloat(priorP.rows[0]?.qty) || 0) - 
+      (parseFloat(priorS.rows[0]?.qty) || 0) - 
+      (parseFloat(priorW.rows[0]?.qty) || 0)
+    );
 
-    const periodP = await query('SELECT COALESCE(SUM(quantity), 0) as total_qty, COALESCE(SUM(total_cost), 0) as total_cost, COUNT(*) as total_orders FROM milk_purchases WHERE date >= ? AND date <= ?', [start, end]);
-    const periodS = await query('SELECT COALESCE(SUM(quantity), 0) as total_qty, COALESCE(SUM(total_sale), 0) as total_revenue, COUNT(*) as total_orders FROM milk_sales WHERE date >= ? AND date <= ?', [start, end]);
-    const periodE = await query('SELECT COALESCE(SUM(amount), 0) as total FROM expenses WHERE date >= ? AND date <= ?', [start, end]);
-    const expBreakdownRes = await query('SELECT category, SUM(amount) as amount, COUNT(*) as count FROM expenses WHERE date >= ? AND date <= ? GROUP BY category ORDER BY amount DESC', [start, end]);
-
-    const purchased = parseFloat(periodP.rows[0].total_qty) || 0;
-    const purchaseCost = parseFloat(periodP.rows[0].total_cost) || 0;
-    const sold = parseFloat(periodS.rows[0].total_qty) || 0;
-    const salesRevenue = parseFloat(periodS.rows[0].total_revenue) || 0;
-    const totalExpenses = parseFloat(periodE.rows[0].total) || 0;
-    const closingStock = Math.max(0, openingStock + purchased - sold);
+    const purchased = parseFloat(periodP.rows[0]?.total_qty) || 0;
+    const purchaseCost = parseFloat(periodP.rows[0]?.total_cost) || 0;
+    const sold = parseFloat(periodS.rows[0]?.total_qty) || 0;
+    const salesRevenue = parseFloat(periodS.rows[0]?.total_revenue) || 0;
+    const wasted = parseFloat(periodW.rows[0]?.total_qty) || 0;
+    const wasteLoss = parseFloat(periodW.rows[0]?.total_loss) || 0;
+    const totalExpenses = parseFloat(periodE.rows[0]?.total) || 0;
+    const closingStock = Math.max(0, openingStock + purchased - sold - wasted);
 
     const avgPurchaseRate = purchased > 0 ? (purchaseCost / purchased) : 0;
     const avgSellingRate = sold > 0 ? (salesRevenue / sold) : 0;
 
     const cogs = sold * metrics.weightedAvgCost;
     const grossProfit = salesRevenue - cogs;
-    const netProfit = grossProfit - totalExpenses;
+    const netProfit = grossProfit - totalExpenses - wasteLoss;
     const grossMargin = salesRevenue > 0 ? ((grossProfit / salesRevenue) * 100) : 0;
     const profitPerLiter = sold > 0 ? (grossProfit / sold) : 0;
 
-    const periodDaysRes = await query(`
-      WITH all_dates AS (
-        SELECT DISTINCT date FROM milk_purchases WHERE date >= ? AND date <= ?
-        UNION
-        SELECT DISTINCT date FROM milk_sales WHERE date >= ? AND date <= ?
-      )
-      SELECT date FROM all_dates ORDER BY date ASC
-    `, [start, end, start, end]);
+    // Build timeline breakdown in memory
+    const timelineMap = {};
+    for (const r of purchasesBreakdown.rows) {
+      const d = normalizeDate(r.date);
+      if (!timelineMap[d]) timelineMap[d] = { date: d, purchasedQty: 0, purchaseCost: 0, soldQty: 0, salesRevenue: 0, expenses: 0, wasteQty: 0, wasteLoss: 0 };
+      timelineMap[d].purchasedQty = parseFloat(r.qty) || 0;
+      timelineMap[d].purchaseCost = parseFloat(r.cost) || 0;
+    }
+    for (const r of salesBreakdown.rows) {
+      const d = normalizeDate(r.date);
+      if (!timelineMap[d]) timelineMap[d] = { date: d, purchasedQty: 0, purchaseCost: 0, soldQty: 0, salesRevenue: 0, expenses: 0, wasteQty: 0, wasteLoss: 0 };
+      timelineMap[d].soldQty = parseFloat(r.qty) || 0;
+      timelineMap[d].salesRevenue = parseFloat(r.rev) || 0;
+    }
+    for (const r of expensesBreakdown.rows) {
+      const d = normalizeDate(r.date);
+      if (!timelineMap[d]) timelineMap[d] = { date: d, purchasedQty: 0, purchaseCost: 0, soldQty: 0, salesRevenue: 0, expenses: 0, wasteQty: 0, wasteLoss: 0 };
+      timelineMap[d].expenses = parseFloat(r.exp) || 0;
+    }
+    for (const r of wasteBreakdown.rows) {
+      const d = normalizeDate(r.date);
+      if (!timelineMap[d]) timelineMap[d] = { date: d, purchasedQty: 0, purchaseCost: 0, soldQty: 0, salesRevenue: 0, expenses: 0, wasteQty: 0, wasteLoss: 0 };
+      timelineMap[d].wasteQty = parseFloat(r.qty) || 0;
+      timelineMap[d].wasteLoss = parseFloat(r.loss) || 0;
+    }
 
-    const breakdown = await Promise.all(periodDaysRes.rows.map(async ({ date }) => {
-      const p = await query('SELECT COALESCE(SUM(quantity), 0) as qty, COALESCE(SUM(total_cost), 0) as cost FROM milk_purchases WHERE date = ?', [date]);
-      const s = await query('SELECT COALESCE(SUM(quantity), 0) as qty, COALESCE(SUM(total_sale), 0) as rev FROM milk_sales WHERE date = ?', [date]);
-      const e = await query('SELECT COALESCE(SUM(amount), 0) as exp FROM expenses WHERE date = ?', [date]);
-
-      const dayPQty = parseFloat(p.rows[0].qty) || 0;
-      const dayPCost = parseFloat(p.rows[0].cost) || 0;
-      const daySQty = parseFloat(s.rows[0].qty) || 0;
-      const daySRev = parseFloat(s.rows[0].rev) || 0;
-      const dayExp = parseFloat(e.rows[0].exp) || 0;
-      const dayCogs = daySQty * metrics.weightedAvgCost;
-      const dayGrossProfit = daySRev - dayCogs;
-
-      return {
-        date: normalizeDate(date),
-        purchasedQty: dayPQty,
-        purchaseCost: dayPCost,
-        soldQty: daySQty,
-        salesRevenue: daySRev,
-        cogs: Math.round(dayCogs),
-        grossProfit: Math.round(dayGrossProfit),
-        expenses: dayExp,
-        netProfit: Math.round(dayGrossProfit - dayExp),
-      };
-    }));
+    const breakdown = Object.values(timelineMap)
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .map(row => {
+        const dayCogs = row.soldQty * metrics.weightedAvgCost;
+        const dayGrossProfit = row.salesRevenue - dayCogs;
+        return {
+          date: row.date,
+          purchasedQty: row.purchasedQty,
+          purchaseCost: row.purchaseCost,
+          soldQty: row.soldQty,
+          salesRevenue: row.salesRevenue,
+          wasteQty: row.wasteQty,
+          wasteLoss: row.wasteLoss,
+          cogs: Math.round(dayCogs),
+          grossProfit: Math.round(dayGrossProfit),
+          expenses: row.expenses,
+          netProfit: Math.round(dayGrossProfit - row.expenses - row.wasteLoss),
+        };
+      });
 
     res.json({
       period: { type, startDate: start, endDate: end },
-      stock: { openingStock, purchased, sold, closingStock },
-      purchaseSummary: { totalQty: purchased, totalCost: purchaseCost, avgRate: avgPurchaseRate, orderCount: parseInt(periodP.rows[0].total_orders, 10) || 0 },
-      salesSummary: { totalQty: sold, totalRevenue: salesRevenue, avgRate: avgSellingRate, orderCount: parseInt(periodS.rows[0].total_orders, 10) || 0 },
-      profitSummary: { cogs: Math.round(cogs), grossProfit: Math.round(grossProfit), grossMargin: parseFloat(grossMargin.toFixed(2)), profitPerLiter: parseFloat(profitPerLiter.toFixed(2)), expenses: totalExpenses, netProfit: Math.round(netProfit) },
+      stock: { openingStock, purchased, sold, wasted, closingStock },
+      purchaseSummary: { totalQty: purchased, totalCost: purchaseCost, avgRate: avgPurchaseRate, orderCount: parseInt(periodP.rows[0]?.total_orders, 10) || 0 },
+      salesSummary: { totalQty: sold, totalRevenue: salesRevenue, avgRate: avgSellingRate, orderCount: parseInt(periodS.rows[0]?.total_orders, 10) || 0 },
+      wasteSummary: { totalQty: wasted, totalLoss: wasteLoss, count: parseInt(periodW.rows[0]?.total_count, 10) || 0 },
+      profitSummary: { cogs: Math.round(cogs), grossProfit: Math.round(grossProfit), grossMargin: parseFloat(grossMargin.toFixed(2)), profitPerLiter: parseFloat(profitPerLiter.toFixed(2)), expenses: totalExpenses, wasteLoss, netProfit: Math.round(netProfit) },
       expenseBreakdown: expBreakdownRes.rows.map(r => ({ category: r.category, amount: parseFloat(r.amount), count: parseInt(r.count, 10) })),
       breakdown
     });
@@ -989,7 +1480,7 @@ app.get('/api/expenses', async (req, res) => {
       params.push(endDate);
     }
     if (search) {
-      sql += ' AND (name ILIKE ? OR notes ILIKE ?)';
+      sql += ' AND (name LIKE ? OR notes LIKE ?)';
       params.push(`%${search}%`, `%${search}%`);
     }
 
@@ -1064,28 +1555,38 @@ app.delete('/api/expenses/:id', async (req, res) => {
   }
 });
 
-// ---------------- CUSTOMERS API ----------------
+// ---------------- CUSTOMERS API (Optimized Single Grouping) ----------------
 app.get('/api/customers', async (req, res) => {
   try {
     const custRes = await query('SELECT * FROM customers ORDER BY name ASC');
-    const customers = await Promise.all(custRes.rows.map(async (c) => {
-      const stats = await query(`
-        SELECT 
-          COALESCE(SUM(quantity), 0) as total_qty,
-          COALESCE(SUM(total_sale), 0) as total_spent,
-          COUNT(*) as order_count,
-          COALESCE(SUM(CASE WHEN payment_status = 'Due' THEN total_sale ELSE 0 END), 0) as total_due
-        FROM milk_sales WHERE customer_id = ? OR customer_name = ?
-      `, [c.id, c.name]);
+    const salesStatsRes = await query(`
+      SELECT 
+        customer_id,
+        customer_name,
+        COALESCE(SUM(quantity), 0) as total_qty,
+        COALESCE(SUM(total_sale), 0) as total_spent,
+        COUNT(*) as order_count,
+        COALESCE(SUM(CASE WHEN payment_status = 'Due' THEN total_sale ELSE 0 END), 0) as total_due
+      FROM milk_sales
+      GROUP BY customer_id, customer_name
+    `);
 
+    const statsMap = {};
+    for (const r of salesStatsRes.rows) {
+      if (r.customer_id) statsMap[`id_${r.customer_id}`] = r;
+      if (r.customer_name) statsMap[`name_${r.customer_name.toLowerCase()}`] = r;
+    }
+
+    const customers = custRes.rows.map(c => {
+      const stats = statsMap[`id_${c.id}`] || statsMap[`name_${c.name.toLowerCase()}`] || {};
       return {
         ...c,
-        total_qty: parseFloat(stats.rows[0].total_qty) || 0,
-        total_spent: parseFloat(stats.rows[0].total_spent) || 0,
-        total_due: parseFloat(stats.rows[0].total_due) || 0,
-        order_count: parseInt(stats.rows[0].order_count, 10) || 0
+        total_qty: parseFloat(stats.total_qty) || 0,
+        total_spent: parseFloat(stats.total_spent) || 0,
+        total_due: parseFloat(stats.total_due) || 0,
+        order_count: parseInt(stats.order_count, 10) || 0
       };
-    }));
+    });
 
     res.json({ customers });
   } catch (err) {
@@ -1160,26 +1661,36 @@ app.delete('/api/customers/:id', async (req, res) => {
   }
 });
 
-// ---------------- SUPPLIERS API ----------------
+// ---------------- SUPPLIERS API (Optimized Single Grouping) ----------------
 app.get('/api/suppliers', async (req, res) => {
   try {
     const supRes = await query('SELECT * FROM suppliers ORDER BY name ASC');
-    const suppliers = await Promise.all(supRes.rows.map(async (s) => {
-      const stats = await query(`
-        SELECT 
-          COALESCE(SUM(quantity), 0) as total_qty,
-          COALESCE(SUM(total_cost), 0) as total_paid,
-          COUNT(*) as purchase_count
-        FROM milk_purchases WHERE supplier_id = ? OR supplier_name = ?
-      `, [s.id, s.name]);
+    const purchaseStatsRes = await query(`
+      SELECT 
+        supplier_id,
+        supplier_name,
+        COALESCE(SUM(quantity), 0) as total_qty,
+        COALESCE(SUM(total_cost), 0) as total_paid,
+        COUNT(*) as purchase_count
+      FROM milk_purchases
+      GROUP BY supplier_id, supplier_name
+    `);
 
+    const statsMap = {};
+    for (const r of purchaseStatsRes.rows) {
+      if (r.supplier_id) statsMap[`id_${r.supplier_id}`] = r;
+      if (r.supplier_name) statsMap[`name_${r.supplier_name.toLowerCase()}`] = r;
+    }
+
+    const suppliers = supRes.rows.map(s => {
+      const stats = statsMap[`id_${s.id}`] || statsMap[`name_${s.name.toLowerCase()}`] || {};
       return {
         ...s,
-        total_qty: parseFloat(stats.rows[0].total_qty) || 0,
-        total_paid: parseFloat(stats.rows[0].total_paid) || 0,
-        purchase_count: parseInt(stats.rows[0].purchase_count, 10) || 0
+        total_qty: parseFloat(stats.total_qty) || 0,
+        total_paid: parseFloat(stats.total_paid) || 0,
+        purchase_count: parseInt(stats.purchase_count, 10) || 0
       };
-    }));
+    });
 
     res.json({ suppliers });
   } catch (err) {
