@@ -326,3 +326,30 @@ export interface AppSettings {
   currency_code: string;
   theme: 'light' | 'dark';
 }
+
+export interface Product {
+  id: number;
+  name: string;
+  unit: string;
+  default_price: number;
+  description?: string;
+  is_active: boolean;
+  created_at?: string;
+}
+
+export interface ProductSale {
+  id: number;
+  date: string;
+  product_id?: number | null;
+  product_name: string;
+  quantity: number;
+  unit: string;
+  selling_price: number;
+  total_amount: number;
+  customer_name: string;
+  customer_phone?: string;
+  payment_status: 'Paid' | 'Due' | 'Partial';
+  notes?: string;
+  created_at?: string;
+}
+

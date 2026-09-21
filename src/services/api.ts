@@ -10,7 +10,9 @@ import {
   Customer, 
   Supplier, 
   AppSettings,
-  User
+  User,
+  Product,
+  ProductSale
 } from '../types';
 
 export const getBaseUrl = (): string => {
@@ -386,6 +388,72 @@ export const api = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(settings)
+    });
+    return handleResponse(res);
+  },
+
+  // Products
+  getProducts: async (): Promise<{ products: Product[] }> => {
+    const token = localStorage.getItem('dpo_token');
+    const res = await fetch(`${getBaseUrl()}/products`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    return handleResponse(res);
+  },
+
+  createProduct: async (data: Partial<Product>): Promise<{ product: Product; message: string }> => {
+    const token = localStorage.getItem('dpo_token');
+    const res = await fetch(`${getBaseUrl()}/products`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify(data)
+    });
+    return handleResponse(res);
+  },
+
+  updateProduct: async (id: number, data: Partial<Product>): Promise<{ message: string }> => {
+    const token = localStorage.getItem('dpo_token');
+    const res = await fetch(`${getBaseUrl()}/products/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify(data)
+    });
+    return handleResponse(res);
+  },
+
+  deleteProduct: async (id: number): Promise<{ message: string }> => {
+    const token = localStorage.getItem('dpo_token');
+    const res = await fetch(`${getBaseUrl()}/products/${id}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    return handleResponse(res);
+  },
+
+  // Product Sales
+  getProductSales: async (): Promise<{ sales: ProductSale[]; stats: any }> => {
+    const token = localStorage.getItem('dpo_token');
+    const res = await fetch(`${getBaseUrl()}/product-sales`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    return handleResponse(res);
+  },
+
+  createProductSale: async (data: Partial<ProductSale>): Promise<{ sale: ProductSale; message: string }> => {
+    const token = localStorage.getItem('dpo_token');
+    const res = await fetch(`${getBaseUrl()}/product-sales`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify(data)
+    });
+    return handleResponse(res);
+  },
+
+  deleteProductSale: async (id: number): Promise<{ message: string }> => {
+    const token = localStorage.getItem('dpo_token');
+    const res = await fetch(`${getBaseUrl()}/product-sales/${id}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` }
     });
     return handleResponse(res);
   },

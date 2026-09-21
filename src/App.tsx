@@ -32,6 +32,7 @@ const ExpensesView = lazy(() => import('./views/ExpensesView').then(m => ({ defa
 const CustomersView = lazy(() => import('./views/CustomersView').then(m => ({ default: m.CustomersView })));
 const SuppliersView = lazy(() => import('./views/SuppliersView').then(m => ({ default: m.SuppliersView })));
 const SettingsView = lazy(() => import('./views/SettingsView').then(m => ({ default: m.SettingsView })));
+const ProductsView = lazy(() => import('./views/ProductsView').then(m => ({ default: m.ProductsView })));
 
 // Sleek Skeleton View Loader
 const ViewLoadingSkeleton: React.FC = () => (
@@ -86,6 +87,8 @@ export const AppContent: React.FC = () => {
         return <SuppliersView />;
       case 'settings':
         return <SettingsView />;
+      case 'products':
+        return <ProductsView />;
       default:
         return <DashboardView />;
     }

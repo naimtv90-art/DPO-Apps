@@ -17,6 +17,7 @@ export type NavView =
   | 'expenses'
   | 'customers'
   | 'suppliers'
+  | 'products'
   | 'settings';
 
 export interface ToastItem {

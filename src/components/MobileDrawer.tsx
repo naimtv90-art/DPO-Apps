@@ -17,7 +17,8 @@ import {
   History,
   LogOut,
   Trash2,
-  Briefcase
+  Briefcase,
+  Package
 } from 'lucide-react';
 
 export const MobileDrawer: React.FC = () => {
@@ -53,6 +54,7 @@ export const MobileDrawer: React.FC = () => {
     { id: 'expenses' as NavView, label: 'Expenses', icon: <Receipt className="w-5 h-5 text-rose-500" /> },
     { id: 'customers' as NavView, label: 'Customers', icon: <Users className="w-5 h-5 text-blue-500" /> },
     { id: 'suppliers' as NavView, label: 'Suppliers', icon: <Truck className="w-5 h-5 text-emerald-600" /> },
+    { id: 'products' as NavView, label: 'পণ্য বিক্রয় (দই)', icon: <Package className="w-5 h-5 text-purple-600" /> },
     { id: 'settings' as NavView, label: 'Settings', icon: <SettingsIcon className="w-5 h-5 text-slate-500" /> },
   ];
 

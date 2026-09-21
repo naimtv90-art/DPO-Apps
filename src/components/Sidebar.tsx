@@ -16,7 +16,8 @@ import {
   History,
   FileText,
   Trash2,
-  Briefcase
+  Briefcase,
+  Package
 } from 'lucide-react';
 
 interface NavItem {
@@ -99,6 +100,11 @@ export const Sidebar: React.FC = () => {
       id: 'suppliers',
       label: 'Suppliers',
       icon: <Truck className="w-5 h-5 text-emerald-600" />,
+    },
+    {
+      id: 'products',
+      label: 'পণ্য বিক্রয় (দই)',
+      icon: <Package className="w-5 h-5 text-purple-600" />,
     },
     {
       id: 'settings',

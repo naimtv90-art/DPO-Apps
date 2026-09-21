@@ -238,12 +238,39 @@ export async function initDatabase() {
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
 
+      CREATE TABLE IF NOT EXISTS products (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        unit VARCHAR(50) DEFAULT 'Piece',
+        default_price NUMERIC(12, 2) DEFAULT 0,
+        description TEXT,
+        is_active BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS product_sales (
+        id SERIAL PRIMARY KEY,
+        date DATE NOT NULL,
+        product_id INTEGER REFERENCES products(id) ON DELETE SET NULL,
+        product_name VARCHAR(255) NOT NULL,
+        quantity NUMERIC(12, 2) NOT NULL CHECK (quantity > 0),
+        unit VARCHAR(50) DEFAULT 'Piece',
+        selling_price NUMERIC(12, 2) NOT NULL CHECK (selling_price >= 0),
+        total_amount NUMERIC(12, 2) NOT NULL,
+        customer_name VARCHAR(255) DEFAULT 'Cash Customer',
+        customer_phone VARCHAR(50),
+        payment_status VARCHAR(50) DEFAULT 'Paid',
+        notes TEXT,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+
       CREATE INDEX IF NOT EXISTS idx_purchases_date ON milk_purchases(date DESC);
       CREATE INDEX IF NOT EXISTS idx_sales_date ON milk_sales(date DESC);
       CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses(date DESC);
       CREATE INDEX IF NOT EXISTS idx_rates_date ON milk_rates(date DESC);
       CREATE INDEX IF NOT EXISTS idx_investments_date ON partner_investments(date DESC);
       CREATE INDEX IF NOT EXISTS idx_waste_date ON product_waste(date DESC);
+      CREATE INDEX IF NOT EXISTS idx_product_sales_date ON product_sales(date DESC);
     `;
     await pgPool.query(postgresSchema);
   } else {
@@ -368,12 +395,39 @@ export async function initDatabase() {
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       );
 
+      CREATE TABLE IF NOT EXISTS products (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        unit TEXT DEFAULT 'Piece',
+        default_price REAL DEFAULT 0,
+        description TEXT,
+        is_active INTEGER DEFAULT 1,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS product_sales (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        date TEXT NOT NULL,
+        product_id INTEGER REFERENCES products(id) ON DELETE SET NULL,
+        product_name TEXT NOT NULL,
+        quantity REAL NOT NULL,
+        unit TEXT DEFAULT 'Piece',
+        selling_price REAL NOT NULL,
+        total_amount REAL NOT NULL,
+        customer_name TEXT DEFAULT 'Cash Customer',
+        customer_phone TEXT,
+        payment_status TEXT DEFAULT 'Paid',
+        notes TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
       CREATE INDEX IF NOT EXISTS idx_purchases_date ON milk_purchases(date DESC);
       CREATE INDEX IF NOT EXISTS idx_sales_date ON milk_sales(date DESC);
       CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses(date DESC);
       CREATE INDEX IF NOT EXISTS idx_rates_date ON milk_rates(date DESC);
       CREATE INDEX IF NOT EXISTS idx_investments_date ON partner_investments(date DESC);
       CREATE INDEX IF NOT EXISTS idx_waste_date ON product_waste(date DESC);
+      CREATE INDEX IF NOT EXISTS idx_product_sales_date ON product_sales(date DESC);
     `);
   }
 
@@ -444,6 +498,22 @@ export async function initDatabase() {
       'INSERT INTO milk_rates (date, purchase_rate, selling_rate, unit, notes) VALUES (?, ?, ?, ?, ?)',
       [new Date().toISOString().substring(0, 10), 60.0, 85.0, 'Liter', 'Base standard rates']
     );
+  }
+
+  // Seed default products (দই/Yogurt catalog)
+  const productCheck = await query('SELECT COUNT(*) as count FROM products');
+  if (parseInt(productCheck.rows[0].count, 10) === 0) {
+    const defaultProducts = [
+      { name: 'দই ছোট', unit: 'Piece', default_price: 30, description: 'Small yogurt cup' },
+      { name: 'দই ১ কেজি', unit: 'KG', default_price: 120, description: '1 KG yogurt pack' },
+      { name: 'দই ২ কেজি', unit: 'KG', default_price: 230, description: '2 KG yogurt pack' },
+    ];
+    for (const p of defaultProducts) {
+      await query(
+        'INSERT INTO products (name, unit, default_price, description) VALUES (?, ?, ?, ?)',
+        [p.name, p.unit, p.default_price, p.description]
+      );
+    }
   }
 }
 

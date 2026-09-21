@@ -1809,6 +1809,137 @@ app.post('/api/settings', async (req, res) => {
   }
 });
 
+// =================== PRODUCTS API ===================
+
+// GET all products
+app.get('/api/products', authenticate, async (req, res) => {
+  try {
+    const result = await query('SELECT * FROM products WHERE is_active = ? ORDER BY name ASC', [true]);
+    res.json({ products: result.rows });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch products' });
+  }
+});
+
+// POST create product
+app.post('/api/products', authenticate, async (req, res) => {
+  try {
+    const { name, unit, default_price, description } = req.body;
+    if (!name) return res.status(400).json({ error: 'Product name required' });
+    const result = await query(
+      'INSERT INTO products (name, unit, default_price, description) VALUES (?, ?, ?, ?) RETURNING *',
+      [name.trim(), unit || 'Piece', parseFloat(default_price) || 0, description || '']
+    );
+    res.status(201).json({ product: result.rows[0], message: 'Product created' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to create product' });
+  }
+});
+
+// PUT update product
+app.put('/api/products/:id', authenticate, async (req, res) => {
+  try {
+    const { name, unit, default_price, description } = req.body;
+    await query(
+      'UPDATE products SET name = ?, unit = ?, default_price = ?, description = ? WHERE id = ?',
+      [name.trim(), unit || 'Piece', parseFloat(default_price) || 0, description || '', req.params.id]
+    );
+    res.json({ message: 'Product updated' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to update product' });
+  }
+});
+
+// DELETE product
+app.delete('/api/products/:id', authenticate, async (req, res) => {
+  try {
+    await query('UPDATE products SET is_active = ? WHERE id = ?', [false, req.params.id]);
+    res.json({ message: 'Product deleted' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to delete product' });
+  }
+});
+
+// =================== PRODUCT SALES API ===================
+
+// GET product sales
+app.get('/api/product-sales', authenticate, async (req, res) => {
+  try {
+    const { limit = 100, product_id } = req.query;
+    let sql = 'SELECT * FROM product_sales';
+    const params = [];
+    if (product_id) {
+      sql += ' WHERE product_id = ?';
+      params.push(product_id);
+    }
+    sql += ' ORDER BY date DESC, created_at DESC LIMIT ?';
+    params.push(parseInt(limit));
+    const result = await query(sql, params);
+    
+    // Summary stats
+    const statsRes = await query(`
+      SELECT 
+        COALESCE(SUM(total_amount), 0) as total_revenue,
+        COALESCE(SUM(quantity), 0) as total_qty,
+        COUNT(*) as total_count
+      FROM product_sales
+    `);
+
+    res.json({ sales: result.rows.map(s => ({ ...s, date: normalizeDate(s.date) })), stats: statsRes.rows[0] });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch product sales' });
+  }
+});
+
+// POST create product sale
+app.post('/api/product-sales', authenticate, async (req, res) => {
+  try {
+    const { date, product_id, product_name, quantity, unit, selling_price, customer_name, customer_phone, payment_status, notes } = req.body;
+    if (!product_name) return res.status(400).json({ error: 'Product name required' });
+    if (!quantity || quantity <= 0) return res.status(400).json({ error: 'Valid quantity required' });
+    if (selling_price < 0) return res.status(400).json({ error: 'Selling price cannot be negative' });
+
+    const total_amount = parseFloat(quantity) * parseFloat(selling_price);
+    const result = await query(
+      `INSERT INTO product_sales (date, product_id, product_name, quantity, unit, selling_price, total_amount, customer_name, customer_phone, payment_status, notes) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`,
+      [
+        date || new Date().toISOString().substring(0, 10),
+        product_id || null,
+        product_name.trim(),
+        parseFloat(quantity),
+        unit || 'Piece',
+        parseFloat(selling_price) || 0,
+        total_amount,
+        customer_name?.trim() || 'Cash Customer',
+        customer_phone || '',
+        payment_status || 'Paid',
+        notes?.trim() || ''
+      ]
+    );
+    res.status(201).json({ sale: result.rows[0], message: 'Product sale recorded' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to create product sale' });
+  }
+});
+
+// DELETE product sale
+app.delete('/api/product-sales/:id', authenticate, async (req, res) => {
+  try {
+    await query('DELETE FROM product_sales WHERE id = ?', [req.params.id]);
+    res.json({ message: 'Sale deleted' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to delete product sale' });
+  }
+});
+
 // SPA Fallback for production routing
 app.get('*', (req, res) => {
   if (req.path.startsWith('/api')) {
