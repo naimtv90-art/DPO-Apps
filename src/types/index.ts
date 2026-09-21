@@ -353,3 +353,19 @@ export interface ProductSale {
   created_at?: string;
 }
 
+export interface ProductPurchase {
+  id: number;
+  date: string;
+  product_id?: number | null;
+  product_name: string;
+  quantity: number;
+  unit: string;
+  purchase_price: number;
+  total_amount: number;
+  supplier_name: string;
+  supplier_phone?: string;
+  payment_status: 'Paid' | 'Due' | 'Partial';
+  notes?: string;
+  created_at?: string;
+}
+

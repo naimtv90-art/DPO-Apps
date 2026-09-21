@@ -264,6 +264,22 @@ export async function initDatabase() {
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
 
+      CREATE TABLE IF NOT EXISTS product_purchases (
+        id SERIAL PRIMARY KEY,
+        date DATE NOT NULL,
+        product_id INTEGER REFERENCES products(id) ON DELETE SET NULL,
+        product_name VARCHAR(255) NOT NULL,
+        quantity NUMERIC(12, 2) NOT NULL CHECK (quantity > 0),
+        unit VARCHAR(50) DEFAULT 'Piece',
+        purchase_price NUMERIC(12, 2) NOT NULL CHECK (purchase_price >= 0),
+        total_amount NUMERIC(12, 2) NOT NULL,
+        supplier_name VARCHAR(255) DEFAULT 'General Supplier',
+        supplier_phone VARCHAR(50),
+        payment_status VARCHAR(50) DEFAULT 'Paid',
+        notes TEXT,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+
       CREATE INDEX IF NOT EXISTS idx_purchases_date ON milk_purchases(date DESC);
       CREATE INDEX IF NOT EXISTS idx_sales_date ON milk_sales(date DESC);
       CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses(date DESC);
@@ -271,6 +287,7 @@ export async function initDatabase() {
       CREATE INDEX IF NOT EXISTS idx_investments_date ON partner_investments(date DESC);
       CREATE INDEX IF NOT EXISTS idx_waste_date ON product_waste(date DESC);
       CREATE INDEX IF NOT EXISTS idx_product_sales_date ON product_sales(date DESC);
+      CREATE INDEX IF NOT EXISTS idx_product_purchases_date ON product_purchases(date DESC);
     `;
     await pgPool.query(postgresSchema);
   } else {
@@ -421,6 +438,22 @@ export async function initDatabase() {
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       );
 
+      CREATE TABLE IF NOT EXISTS product_purchases (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        date TEXT NOT NULL,
+        product_id INTEGER REFERENCES products(id) ON DELETE SET NULL,
+        product_name TEXT NOT NULL,
+        quantity REAL NOT NULL,
+        unit TEXT DEFAULT 'Piece',
+        purchase_price REAL NOT NULL,
+        total_amount REAL NOT NULL,
+        supplier_name TEXT DEFAULT 'General Supplier',
+        supplier_phone TEXT,
+        payment_status TEXT DEFAULT 'Paid',
+        notes TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
       CREATE INDEX IF NOT EXISTS idx_purchases_date ON milk_purchases(date DESC);
       CREATE INDEX IF NOT EXISTS idx_sales_date ON milk_sales(date DESC);
       CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses(date DESC);
@@ -428,6 +461,7 @@ export async function initDatabase() {
       CREATE INDEX IF NOT EXISTS idx_investments_date ON partner_investments(date DESC);
       CREATE INDEX IF NOT EXISTS idx_waste_date ON product_waste(date DESC);
       CREATE INDEX IF NOT EXISTS idx_product_sales_date ON product_sales(date DESC);
+      CREATE INDEX IF NOT EXISTS idx_product_purchases_date ON product_purchases(date DESC);
     `);
   }
 

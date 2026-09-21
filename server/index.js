@@ -1940,6 +1940,82 @@ app.delete('/api/product-sales/:id', authenticate, async (req, res) => {
   }
 });
 
+// =================== PRODUCT PURCHASES API (দই ও অন্যান্য পণ্য ক্রয়) ===================
+
+// GET product purchases
+app.get('/api/product-purchases', authenticate, async (req, res) => {
+  try {
+    const { limit = 100, product_id } = req.query;
+    let sql = 'SELECT * FROM product_purchases';
+    const params = [];
+    if (product_id) {
+      sql += ' WHERE product_id = ?';
+      params.push(product_id);
+    }
+    sql += ' ORDER BY date DESC, created_at DESC LIMIT ?';
+    params.push(parseInt(limit));
+    const result = await query(sql, params);
+    
+    // Summary stats
+    const statsRes = await query(`
+      SELECT 
+        COALESCE(SUM(total_amount), 0) as total_cost,
+        COALESCE(SUM(quantity), 0) as total_qty,
+        COUNT(*) as total_count
+      FROM product_purchases
+    `);
+
+    res.json({ purchases: result.rows.map(p => ({ ...p, date: normalizeDate(p.date) })), stats: statsRes.rows[0] });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch product purchases' });
+  }
+});
+
+// POST create product purchase
+app.post('/api/product-purchases', authenticate, async (req, res) => {
+  try {
+    const { date, product_id, product_name, quantity, unit, purchase_price, supplier_name, supplier_phone, payment_status, notes } = req.body;
+    if (!product_name) return res.status(400).json({ error: 'Product name required' });
+    if (!quantity || quantity <= 0) return res.status(400).json({ error: 'Valid quantity required' });
+    if (purchase_price < 0) return res.status(400).json({ error: 'Purchase price cannot be negative' });
+
+    const total_amount = parseFloat(quantity) * parseFloat(purchase_price);
+    const result = await query(
+      `INSERT INTO product_purchases (date, product_id, product_name, quantity, unit, purchase_price, total_amount, supplier_name, supplier_phone, payment_status, notes) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`,
+      [
+        date || new Date().toISOString().substring(0, 10),
+        product_id || null,
+        product_name.trim(),
+        parseFloat(quantity),
+        unit || 'Piece',
+        parseFloat(purchase_price) || 0,
+        total_amount,
+        supplier_name?.trim() || 'General Supplier',
+        supplier_phone || '',
+        payment_status || 'Paid',
+        notes?.trim() || ''
+      ]
+    );
+    res.status(201).json({ purchase: result.rows[0], message: 'Product purchase recorded' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to create product purchase' });
+  }
+});
+
+// DELETE product purchase
+app.delete('/api/product-purchases/:id', authenticate, async (req, res) => {
+  try {
+    await query('DELETE FROM product_purchases WHERE id = ?', [req.params.id]);
+    res.json({ message: 'Purchase deleted' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to delete product purchase' });
+  }
+});
+
 // SPA Fallback for production routing
 app.get('*', (req, res) => {
   if (req.path.startsWith('/api')) {
