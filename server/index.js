@@ -315,7 +315,7 @@ app.get('/api/dashboard/stats', async (req, res) => {
     const totalGrossProfit = totalSalesRevenue - totalCOGS;
     const totalNetProfit = totalGrossProfit - totalExpenses - totalWasteLoss;
     const grossMargin = totalSalesRevenue > 0 ? ((totalGrossProfit / totalSalesRevenue) * 100) : 0;
-    const profitPerLiter = totalSold > 0 ? (grossProfit / totalSold) : 0;
+    const profitPerLiter = totalSold > 0 ? (totalGrossProfit / totalSold) : 0;
     const avgSellingRate = totalSold > 0 ? (totalSalesRevenue / totalSold) : 0;
 
     const todayCOGS = todaySalesQty * weightedAvgCost;
@@ -346,6 +346,19 @@ app.get('/api/dashboard/stats', async (req, res) => {
       count: parseInt(r.count, 10) || 0
     }));
     const totalInvestedCapital = partnerInvestments.reduce((sum, p) => sum + p.total_invested, 0);
+
+    // Expense Categories aggregation
+    const expenseCategoriesMap = {};
+    for (const e of allExpensesRes.rows) {
+      const cat = e.category || 'Other';
+      const amt = parseFloat(e.amount) || 0;
+      if (!expenseCategoriesMap[cat]) {
+        expenseCategoriesMap[cat] = { category: cat, total: 0, count: 0 };
+      }
+      expenseCategoriesMap[cat].total += amt;
+      expenseCategoriesMap[cat].count += 1;
+    }
+    const expenseCategories = Object.values(expenseCategoriesMap).sort((a, b) => b.total - a.total);
 
     res.json({
       today: {
@@ -394,6 +407,7 @@ app.get('/api/dashboard/stats', async (req, res) => {
       },
       latestRate: latestRateRes.rows[0] || { purchase_rate: 60, selling_rate: 85, unit: 'Liter' },
       partnerInvestments,
+      expenseCategories,
       charts: formattedCharts,
       recentPurchases: allPurchasesRes.rows.slice(0, 5).map(p => ({
         ...p,

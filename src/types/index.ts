@@ -232,6 +232,7 @@ export interface DashboardStats {
   };
   latestRate: MilkRate;
   partnerInvestments?: { partner_name: string; total_invested: number; count: number }[];
+  expenseCategories?: { category: string; total: number; count: number }[];
   charts: ChartDataPoint[];
   recentPurchases: MilkPurchase[];
   recentSales: MilkSale[];
