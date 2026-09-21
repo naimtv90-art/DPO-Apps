@@ -37,11 +37,18 @@ import {
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4'];
 
+const DEFAULT_PARTNER_SUMMARIES: PartnerSummary[] = [
+  { id: 1, name: 'Md Naim Khan', role: 'Managing Partner (২৫%)', total_invested: 0, share_percentage: 25, entry_count: 0 },
+  { id: 2, name: 'Saiful Islam Sohag', role: 'Partner / Shareholder (২৫%)', total_invested: 0, share_percentage: 25, entry_count: 0 },
+  { id: 3, name: 'Monirul Islam', role: 'Partner / Shareholder (২৫%)', total_invested: 0, share_percentage: 25, entry_count: 0 },
+  { id: 4, name: 'Maruf Sikder', role: 'Partner / Shareholder (২৫%)', total_invested: 0, share_percentage: 25, entry_count: 0 }
+];
+
 export const InvestmentsView: React.FC = () => {
   const { formatCurrency, currency, refreshKey, triggerRefresh, showToast } = useApp();
 
   const [investments, setInvestments] = useState<PartnerInvestment[]>([]);
-  const [partnerSummaries, setPartnerSummaries] = useState<PartnerSummary[]>([]);
+  const [partnerSummaries, setPartnerSummaries] = useState<PartnerSummary[]>(DEFAULT_PARTNER_SUMMARIES);
   const [totalInvested, setTotalInvested] = useState<number>(0);
   const [loading, setLoading] = useState(false);
 

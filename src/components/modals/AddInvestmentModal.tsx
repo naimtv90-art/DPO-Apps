@@ -28,6 +28,13 @@ const PAYMENT_METHODS: ('Cash' | 'Bank Transfer' | 'bKash' | 'Nagad' | 'Rocket' 
   'Cheque'
 ];
 
+const DEFAULT_PARTNERS: Partner[] = [
+  { id: 1, name: 'Md Naim Khan', role: 'Managing Partner (২৫%)' },
+  { id: 2, name: 'Saiful Islam Sohag', role: 'Partner / Shareholder (২৫%)' },
+  { id: 3, name: 'Monirul Islam', role: 'Partner / Shareholder (২৫%)' },
+  { id: 4, name: 'Maruf Sikder', role: 'Partner / Shareholder (২৫%)' }
+];
+
 export const AddInvestmentModal: React.FC<AddInvestmentModalProps> = ({
   isOpen,
   onClose,
@@ -36,9 +43,9 @@ export const AddInvestmentModal: React.FC<AddInvestmentModalProps> = ({
 }) => {
   const { showToast, triggerRefresh, currency, formatCurrency } = useApp();
 
-  const [partners, setPartners] = useState<Partner[]>([]);
+  const [partners, setPartners] = useState<Partner[]>(DEFAULT_PARTNERS);
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-  const [partnerName, setPartnerName] = useState('');
+  const [partnerName, setPartnerName] = useState('Md Naim Khan');
   const [customPartner, setCustomPartner] = useState('');
   const [amount, setAmount] = useState('');
   const [investmentType, setInvestmentType] = useState<PartnerInvestment['investment_type']>('Capital Investment');

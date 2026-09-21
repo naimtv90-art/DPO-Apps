@@ -388,17 +388,27 @@ export async function initDatabase() {
     );
   }
 
-  // Seed 4 Business Partners if empty
-  const partnerCheck = await query('SELECT COUNT(*) as count FROM partners');
-  if (parseInt(partnerCheck.rows[0].count, 10) === 0) {
-    const defaultPartners = [
-      ['Partner 1 (Md. Imran Hossain)', '+880 1712-281861', 'Managing Partner (২৫%)'],
-      ['Partner 2', '+880 1700-000001', 'Partner / Investor (২৫%)'],
-      ['Partner 3', '+880 1700-000002', 'Partner / Investor (২৫%)'],
-      ['Partner 4', '+880 1700-000003', 'Partner / Investor (২৫%)']
-    ];
-    for (const [pName, pPhone, pRole] of defaultPartners) {
-      await query('INSERT INTO partners (name, phone, role) VALUES (?, ?, ?)', [pName, pPhone, pRole]);
+  // Seed / Sync 4 Business Partners
+  const requiredPartners = [
+    { name: 'Md Naim Khan', role: 'Managing Partner (২৫%)' },
+    { name: 'Saiful Islam Sohag', role: 'Partner / Shareholder (২৫%)' },
+    { name: 'Monirul Islam', role: 'Partner / Shareholder (২৫%)' },
+    { name: 'Maruf Sikder', role: 'Partner / Shareholder (২৫%)' }
+  ];
+
+  const partnerCheck = await query('SELECT * FROM partners ORDER BY id ASC');
+  if (partnerCheck.rows.length === 0) {
+    for (const p of requiredPartners) {
+      await query('INSERT INTO partners (name, phone, role) VALUES (?, ?, ?)', [p.name, '', p.role]);
+    }
+  } else {
+    // Update existing partner rows if they had placeholder names
+    for (let i = 0; i < requiredPartners.length; i++) {
+      if (partnerCheck.rows[i]) {
+        await query('UPDATE partners SET name = ?, role = ? WHERE id = ?', [requiredPartners[i].name, requiredPartners[i].role, partnerCheck.rows[i].id]);
+      } else {
+        await query('INSERT INTO partners (name, phone, role) VALUES (?, ?, ?)', [requiredPartners[i].name, '', requiredPartners[i].role]);
+      }
     }
   }
 
