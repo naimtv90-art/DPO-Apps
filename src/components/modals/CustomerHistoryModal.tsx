@@ -107,15 +107,27 @@ export const CustomerHistoryModal: React.FC<CustomerHistoryModalProps> = ({
                     <td className="py-2.5 tabular-nums text-slate-600 dark:text-slate-300">{currency}{s.selling_rate}</td>
                     <td className="py-2.5 font-bold tabular-nums text-sky-600 dark:text-sky-400">{formatCurrency(s.total_sale)}</td>
                     <td className="py-2.5">
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
-                        s.payment_status === 'Paid'
-                          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
-                          : s.payment_status === 'Due'
-                          ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
-                          : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
-                      }`}>
-                        {s.payment_status}
-                      </span>
+                      {s.payment_status === 'Partial' ? (
+                        <div className="flex flex-col gap-0.5">
+                          <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 w-fit">
+                            Partial
+                          </span>
+                          <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold tabular-nums">
+                            জমা: {formatCurrency(s.paid_amount ?? 0)}
+                          </span>
+                          <span className="text-[10px] text-rose-600 dark:text-rose-400 font-bold tabular-nums">
+                            বকেয়া: {formatCurrency(s.due_amount ?? (s.total_sale - (s.paid_amount ?? 0)))}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                          s.payment_status === 'Paid'
+                            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                            : 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
+                        }`}>
+                          {s.payment_status}
+                        </span>
+                      )}
                     </td>
                   </tr>
                 ))}

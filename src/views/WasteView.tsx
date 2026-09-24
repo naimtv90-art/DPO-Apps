@@ -101,10 +101,10 @@ export const WasteView: React.FC = () => {
             <span>Product Loss & Spoilage Control</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-black tracking-tight">
-            Product Waste Management / দুধ নষ্ট/অপচয় ট্র্যাকিং
+            Product Waste Management / αªªαºüαªº αª¿αª╖αºìαªƒ/αªàαª¬αªÜαºƒ αªƒαºìαª░αºìαª»αª╛αªòαª┐αªé
           </h1>
           <p className="text-xs sm:text-sm text-amber-100/90 max-w-xl font-medium">
-            দুধ কেটে যাওয়া, নষ্ট হওয়া, পড়ে যাওয়া বা পরিবহন ক্ষতির হিসাব রাখা এবং স্টক থেকে স্বয়ংক্রিয়ভাবে বাদ দেওয়া।
+            αªªαºüαªº αªòαºçαªƒαºç αª»αª╛αªôαºƒαª╛, αª¿αª╖αºìαªƒ αª╣αªôαºƒαª╛, αª¬αº£αºç αª»αª╛αªôαºƒαª╛ αª¼αª╛ αª¬αª░αª┐αª¼αª╣αª¿ αªòαºìαª╖αªñαª┐αª░ αª╣αª┐αª╕αª╛αª¼ αª░αª╛αªûαª╛ αªÅαª¼αªé αª╕αºìαªƒαªò αªÑαºçαªòαºç αª╕αºìαª¼αºƒαªéαªòαºìαª░αª┐αºƒαª¡αª╛αª¼αºç αª¼αª╛αªª αªªαºçαªôαºƒαª╛αÑñ
           </p>
         </div>
 
@@ -117,7 +117,7 @@ export const WasteView: React.FC = () => {
             className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-white text-slate-900 font-bold text-xs hover:bg-amber-50 transition shadow-lg active:scale-95 group"
           >
             <PlusCircle className="w-4 h-4 text-amber-600 group-hover:scale-110 transition-transform" />
-            <span>+ Record Waste / নষ্ট এন্ট্রি</span>
+            <span>+ Record Waste / αª¿αª╖αºìαªƒ αªÅαª¿αºìαªƒαºìαª░αª┐</span>
           </button>
         </div>
       </div>
@@ -200,7 +200,7 @@ export const WasteView: React.FC = () => {
           </div>
           <div className="mt-2 text-[11px] text-slate-500 pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
             <span>After waste deduction</span>
-            <span className="text-emerald-600 font-bold">View Stock →</span>
+            <span className="text-emerald-600 font-bold">View Stock ΓåÆ</span>
           </div>
         </div>
 
@@ -211,7 +211,7 @@ export const WasteView: React.FC = () => {
         <div className="p-5 sm:p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
           <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider mb-4 flex items-center gap-2">
             <Layers className="w-4 h-4 text-amber-500" />
-            Wastage Breakdown by Reason / নষ্টের কারণভিত্তিক বিশ্লেষণ
+            Wastage Breakdown by Reason / αª¿αª╖αºìαªƒαºçαª░ αªòαª╛αª░αªúαª¡αª┐αªñαºìαªñαª┐αªò αª¼αª┐αª╢αºìαª▓αºçαª╖αªú
           </h3>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -295,7 +295,7 @@ export const WasteView: React.FC = () => {
             <thead>
               <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-400 text-[11px] uppercase tracking-wider">
                 <th className="py-2.5 px-3">Date</th>
-                <th className="py-2.5 px-3">Reason (নষ্টের কারণ)</th>
+                <th className="py-2.5 px-3">Reason (αª¿αª╖αºìαªƒαºçαª░ αªòαª╛αª░αªú)</th>
                 <th className="py-2.5 px-3 text-right">Wasted Volume</th>
                 <th className="py-2.5 px-3 text-right">Est. Loss Value</th>
                 <th className="py-2.5 px-3">Remarks / Notes</th>

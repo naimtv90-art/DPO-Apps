@@ -34,6 +34,45 @@ const SuppliersView = lazy(() => import('./views/SuppliersView').then(m => ({ de
 const SettingsView = lazy(() => import('./views/SettingsView').then(m => ({ default: m.SettingsView })));
 const ProductsView = lazy(() => import('./views/ProductsView').then(m => ({ default: m.ProductsView })));
 
+// Error Boundary Component to prevent white screens
+class ViewErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean; error: any }> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: any) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: any, errorInfo: any) {
+    console.error('View Render Error:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="p-8 rounded-3xl bg-white dark:bg-slate-900 border border-red-200 dark:border-red-900/50 shadow-sm text-center space-y-4 my-8">
+          <div className="w-12 h-12 mx-auto rounded-full bg-red-100 dark:bg-red-950/60 flex items-center justify-center text-red-600 text-xl font-bold">
+            ⚠️
+          </div>
+          <h2 className="text-lg font-bold text-slate-900 dark:text-white">পৃষ্ঠাটি লোড হতে সমস্যা হয়েছে</h2>
+          <p className="text-xs text-slate-500 max-w-md mx-auto">
+            {this.state.error?.message || 'একটি অপ্রত্যাশিত ত্রুটি ঘটেছে। পুনরায় চেষ্টা করুন।'}
+          </p>
+          <button
+            onClick={() => this.setState({ hasError: false, error: null })}
+            className="px-5 py-2.5 rounded-xl bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 transition"
+          >
+            আবার চেষ্টা করুন (Retry)
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 // Sleek Skeleton View Loader
 const ViewLoadingSkeleton: React.FC = () => (
   <div className="space-y-6 animate-pulse">
@@ -111,9 +150,11 @@ export const AppContent: React.FC = () => {
 
         {/* Dynamic Main Workspace Content with Fast Suspense Code-Splitting */}
         <main className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8 pb-24 lg:pb-8 overflow-y-auto">
-          <Suspense fallback={<ViewLoadingSkeleton />}>
-            {renderActiveView()}
-          </Suspense>
+          <ViewErrorBoundary>
+            <Suspense fallback={<ViewLoadingSkeleton />}>
+              {renderActiveView()}
+            </Suspense>
+          </ViewErrorBoundary>
         </main>
       </div>
 

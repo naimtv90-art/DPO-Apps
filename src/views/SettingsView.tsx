@@ -1,22 +1,50 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { AppSettings } from '../types';
-import { Settings as SettingsIcon, Save, Building, User, Phone, MapPin, Scale, DollarSign, Moon, Sun, Shield } from 'lucide-react';
+import { Settings as SettingsIcon, Save, Building, Scale, DollarSign, Server } from 'lucide-react';
+
+const defaultSettingsFallback: AppSettings = {
+  business_name: 'Dairy Pure & Organic',
+  owner_name: 'Md. Imran Hossain',
+  phone: '+880 1712-281861',
+  whatsapp: '+880 1775-002340',
+  address: 'House 18, Road 4, Block C, Mirpur 12, Dhaka-1216',
+  default_unit: 'Liter',
+  default_purchase_rate: '60',
+  default_selling_rate: '85',
+  currency: '৳',
+  currency_code: 'BDT',
+  theme: 'light'
+};
 
 export const SettingsView: React.FC = () => {
   const { settings, updateSettings, showToast } = useApp();
 
-  const [formData, setFormData] = useState<AppSettings>(settings);
+  const [formData, setFormData] = useState<AppSettings>(() => ({
+    ...defaultSettingsFallback,
+    ...(settings || {})
+  }));
   const [loading, setLoading] = useState(false);
+  const [serverUrl, setServerUrl] = useState(() => localStorage.getItem('dpo_custom_api_url') || '');
 
   useEffect(() => {
-    setFormData(settings);
+    if (settings) {
+      setFormData(prev => ({
+        ...prev,
+        ...settings
+      }));
+    }
   }, [settings]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       setLoading(true);
+      if (serverUrl.trim()) {
+        localStorage.setItem('dpo_custom_api_url', serverUrl.trim());
+      } else {
+        localStorage.removeItem('dpo_custom_api_url');
+      }
       await updateSettings(formData);
     } catch (err: any) {
       showToast(err.message || 'Failed to update settings', 'error');
@@ -57,7 +85,7 @@ export const SettingsView: React.FC = () => {
               <input
                 type="text"
                 required
-                value={formData.business_name}
+                value={formData.business_name || ''}
                 onChange={e => setFormData({ ...formData, business_name: e.target.value })}
                 className="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
               />
@@ -70,7 +98,7 @@ export const SettingsView: React.FC = () => {
               <input
                 type="text"
                 required
-                value={formData.owner_name}
+                value={formData.owner_name || ''}
                 onChange={e => setFormData({ ...formData, owner_name: e.target.value })}
                 className="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
               />
@@ -82,7 +110,7 @@ export const SettingsView: React.FC = () => {
               </label>
               <input
                 type="text"
-                value={formData.phone}
+                value={formData.phone || ''}
                 onChange={e => setFormData({ ...formData, phone: e.target.value })}
                 className="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
               />
@@ -106,7 +134,7 @@ export const SettingsView: React.FC = () => {
               </label>
               <input
                 type="text"
-                value={formData.address}
+                value={formData.address || ''}
                 onChange={e => setFormData({ ...formData, address: e.target.value })}
                 className="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
               />
@@ -126,7 +154,7 @@ export const SettingsView: React.FC = () => {
                 Default Milk Unit
               </label>
               <select
-                value={formData.default_unit}
+                value={formData.default_unit || 'Liter'}
                 onChange={e => setFormData({ ...formData, default_unit: e.target.value as any })}
                 className="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm font-semibold focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
               >
@@ -137,14 +165,14 @@ export const SettingsView: React.FC = () => {
 
             <div>
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                Default Purchase Rate ({formData.currency})
+                Default Purchase Rate ({formData.currency || '৳'})
               </label>
               <input
                 type="number"
                 step="0.5"
                 min="1"
                 required
-                value={formData.default_purchase_rate}
+                value={formData.default_purchase_rate || '60'}
                 onChange={e => setFormData({ ...formData, default_purchase_rate: e.target.value })}
                 className="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm font-bold tabular-nums focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
               />
@@ -152,14 +180,14 @@ export const SettingsView: React.FC = () => {
 
             <div>
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                Default Selling Rate ({formData.currency})
+                Default Selling Rate ({formData.currency || '৳'})
               </label>
               <input
                 type="number"
                 step="0.5"
                 min="1"
                 required
-                value={formData.default_selling_rate}
+                value={formData.default_selling_rate || '85'}
                 onChange={e => setFormData({ ...formData, default_selling_rate: e.target.value })}
                 className="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm font-bold tabular-nums focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
               />
@@ -171,7 +199,7 @@ export const SettingsView: React.FC = () => {
               </label>
               <input
                 type="text"
-                value={formData.currency}
+                value={formData.currency || '৳'}
                 onChange={e => setFormData({ ...formData, currency: e.target.value })}
                 className="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm font-bold focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
               />
@@ -183,7 +211,7 @@ export const SettingsView: React.FC = () => {
               </label>
               <input
                 type="text"
-                value={formData.currency_code}
+                value={formData.currency_code || 'BDT'}
                 onChange={e => setFormData({ ...formData, currency_code: e.target.value })}
                 className="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm font-bold focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
               />
@@ -194,7 +222,7 @@ export const SettingsView: React.FC = () => {
                 Interface Appearance
               </label>
               <select
-                value={formData.theme}
+                value={formData.theme || 'light'}
                 onChange={e => setFormData({ ...formData, theme: e.target.value as any })}
                 className="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm font-semibold focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
               >
@@ -209,10 +237,10 @@ export const SettingsView: React.FC = () => {
         <div className="p-6 sm:p-8 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
-              <DollarSign className="w-4 h-4 text-emerald-600" /> Mobile App & Server Connection (মোবাইল অ্যাপ সংযোগ)
+              <Server className="w-4 h-4 text-emerald-600" /> Mobile App & Server Connection (মোবাইল অ্যাপ সংযোগ)
             </h2>
             <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300">
-              Capacitor APK & PWA
+              Capacitor APK & Network
             </span>
           </div>
 
@@ -227,15 +255,8 @@ export const SettingsView: React.FC = () => {
             <input
               type="text"
               placeholder="e.g. http://192.168.0.105:5000 or https://your-domain.com"
-              defaultValue={localStorage.getItem('dpo_custom_api_url') || ''}
-              onChange={e => {
-                const val = e.target.value.trim();
-                if (val) {
-                  localStorage.setItem('dpo_custom_api_url', val);
-                } else {
-                  localStorage.removeItem('dpo_custom_api_url');
-                }
-              }}
+              value={serverUrl}
+              onChange={e => setServerUrl(e.target.value)}
               className="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm font-mono focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
             />
           </div>

@@ -46,3 +46,4 @@ android/*.iml
 android/local.properties
 android/captures
 android/.externalNativeBuild
+*.apk

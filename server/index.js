@@ -640,17 +640,30 @@ app.get('/api/sales', async (req, res) => {
     sql += ' ORDER BY date DESC, id DESC';
     const result = await query(sql, params);
 
-    const sales = result.rows.map(s => ({
-      ...s,
-      date: normalizeDate(s.date),
-      quantity: parseFloat(s.quantity) || 0,
-      selling_rate: parseFloat(s.selling_rate) || 0,
-      total_sale: parseFloat(s.total_sale) || 0
-    }));
+    const sales = result.rows.map(s => {
+      const quantity = parseFloat(s.quantity) || 0;
+      const selling_rate = parseFloat(s.selling_rate) || 0;
+      const total_sale = parseFloat(s.total_sale) || 0;
+      const payment_status = s.payment_status || 'Paid';
+      let paid_amount = s.paid_amount !== null && s.paid_amount !== undefined ? parseFloat(s.paid_amount) : (payment_status === 'Paid' ? total_sale : 0);
+      let due_amount = s.due_amount !== null && s.due_amount !== undefined ? parseFloat(s.due_amount) : (payment_status === 'Due' ? total_sale : (payment_status === 'Partial' ? Math.max(0, total_sale - paid_amount) : 0));
+      return {
+        ...s,
+        date: normalizeDate(s.date),
+        quantity,
+        selling_rate,
+        total_sale,
+        payment_status,
+        paid_amount,
+        due_amount
+      };
+    });
 
     const summary = {
       totalQty: sales.reduce((sum, s) => sum + s.quantity, 0),
       totalSale: sales.reduce((sum, s) => sum + s.total_sale, 0),
+      totalPaidSale: sales.reduce((sum, s) => sum + (s.paid_amount ?? (s.payment_status === 'Paid' ? s.total_sale : 0)), 0),
+      totalDueSale: sales.reduce((sum, s) => sum + (s.due_amount ?? (s.payment_status === 'Due' ? s.total_sale : 0)), 0),
       count: sales.length,
       paidCount: sales.filter(s => s.payment_status === 'Paid').length,
       dueCount: sales.filter(s => s.payment_status === 'Due').length,
@@ -667,7 +680,7 @@ app.get('/api/sales', async (req, res) => {
 
 app.post('/api/sales', async (req, res) => {
   try {
-    const { date, customer_id, customer_name, quantity, unit = 'Liter', selling_rate, payment_status = 'Paid', customer_phone, customer_address, notes } = req.body;
+    const { date, customer_id, customer_name, quantity, unit = 'Liter', selling_rate, payment_status = 'Paid', paid_amount, due_amount, customer_phone, customer_address, notes } = req.body;
 
     if (!date) return res.status(400).json({ error: 'Date is required' });
     const qty = parseFloat(quantity);
@@ -685,6 +698,20 @@ app.post('/api/sales', async (req, res) => {
     }
 
     const totalSale = qty * rate;
+    let paidAmt = totalSale;
+    let dueAmt = 0;
+
+    if (payment_status === 'Paid') {
+      paidAmt = totalSale;
+      dueAmt = 0;
+    } else if (payment_status === 'Due') {
+      paidAmt = 0;
+      dueAmt = totalSale;
+    } else if (payment_status === 'Partial') {
+      paidAmt = Math.max(0, Math.min(totalSale, parseFloat(paid_amount) || 0));
+      dueAmt = Math.max(0, totalSale - paidAmt);
+    }
+
     let custName = customer_name?.trim() || 'Retail Cash Customer';
     let custId = customer_id || null;
 
@@ -707,14 +734,14 @@ app.post('/api/sales', async (req, res) => {
     }
 
     const insertResult = await query(`
-      INSERT INTO milk_sales (date, customer_id, customer_name, quantity, unit, selling_rate, total_sale, customer_phone, customer_address, payment_status, notes)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [date, custId, custName, qty, unit, rate, totalSale, customer_phone || '', customer_address || '', payment_status, notes || '']);
+      INSERT INTO milk_sales (date, customer_id, customer_name, quantity, unit, selling_rate, total_sale, paid_amount, due_amount, customer_phone, customer_address, payment_status, notes)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [date, custId, custName, qty, unit, rate, totalSale, paidAmt, dueAmt, customer_phone || '', customer_address || '', payment_status, notes || '']);
 
     const updatedMetrics = await getInventoryMetrics();
     res.status(201).json({
       message: 'Milk sale recorded successfully!',
-      sale: { id: insertResult.insertId, date, customer_name: custName, quantity: qty, unit, selling_rate: rate, total_sale: totalSale, payment_status },
+      sale: { id: insertResult.insertId, date, customer_name: custName, quantity: qty, unit, selling_rate: rate, total_sale: totalSale, paid_amount: paidAmt, due_amount: dueAmt, payment_status },
       stock: updatedMetrics.currentStock
     });
   } catch (err) {
@@ -730,7 +757,7 @@ app.put('/api/sales/:id', async (req, res) => {
     if (existingRes.rows.length === 0) return res.status(404).json({ error: 'Sale not found' });
     const existing = existingRes.rows[0];
 
-    const { date, customer_id, customer_name, quantity, unit, selling_rate, payment_status, customer_phone, customer_address, notes } = req.body;
+    const { date, customer_id, customer_name, quantity, unit, selling_rate, payment_status, paid_amount, due_amount, customer_phone, customer_address, notes } = req.body;
     const qty = parseFloat(quantity);
     const rate = parseFloat(selling_rate);
 
@@ -747,12 +774,27 @@ app.put('/api/sales/:id', async (req, res) => {
     }
 
     const totalSale = qty * rate;
+    const status = payment_status || existing.payment_status || 'Paid';
+    let paidAmt = totalSale;
+    let dueAmt = 0;
+
+    if (status === 'Paid') {
+      paidAmt = totalSale;
+      dueAmt = 0;
+    } else if (status === 'Due') {
+      paidAmt = 0;
+      dueAmt = totalSale;
+    } else if (status === 'Partial') {
+      const p = paid_amount !== undefined ? parseFloat(paid_amount) : parseFloat(existing.paid_amount);
+      paidAmt = Math.max(0, Math.min(totalSale, isNaN(p) ? 0 : p));
+      dueAmt = Math.max(0, totalSale - paidAmt);
+    }
 
     await query(`
       UPDATE milk_sales 
-      SET date = ?, customer_id = ?, customer_name = ?, quantity = ?, unit = ?, selling_rate = ?, total_sale = ?, customer_phone = ?, customer_address = ?, payment_status = ?, notes = ?
+      SET date = ?, customer_id = ?, customer_name = ?, quantity = ?, unit = ?, selling_rate = ?, total_sale = ?, paid_amount = ?, due_amount = ?, customer_phone = ?, customer_address = ?, payment_status = ?, notes = ?
       WHERE id = ?
-    `, [date || existing.date, customer_id || existing.customer_id, customer_name || existing.customer_name, qty, unit || existing.unit, rate, totalSale, customer_phone ?? existing.customer_phone, customer_address ?? existing.customer_address, payment_status || existing.payment_status, notes ?? existing.notes, id]);
+    `, [date || existing.date, customer_id || existing.customer_id, customer_name || existing.customer_name, qty, unit || existing.unit, rate, totalSale, paidAmt, dueAmt, customer_phone ?? existing.customer_phone, customer_address ?? existing.customer_address, status, notes ?? existing.notes, id]);
 
     res.json({ message: 'Sale updated successfully' });
   } catch (err) {
@@ -1580,7 +1622,11 @@ app.get('/api/customers', async (req, res) => {
         COALESCE(SUM(quantity), 0) as total_qty,
         COALESCE(SUM(total_sale), 0) as total_spent,
         COUNT(*) as order_count,
-        COALESCE(SUM(CASE WHEN payment_status = 'Due' THEN total_sale ELSE 0 END), 0) as total_due
+        COALESCE(SUM(CASE 
+          WHEN payment_status = 'Due' THEN total_sale 
+          WHEN payment_status = 'Partial' THEN COALESCE(due_amount, total_sale - COALESCE(paid_amount, 0))
+          ELSE 0 
+        END), 0) as total_due
       FROM milk_sales
       GROUP BY customer_id, customer_name
     `);
@@ -1617,13 +1663,24 @@ app.get('/api/customers/:id/sales', async (req, res) => {
     const customer = custRes.rows[0];
 
     const salesRes = await query('SELECT * FROM milk_sales WHERE customer_id = ? OR customer_name = ? ORDER BY date DESC', [id, customer.name]);
-    const sales = salesRes.rows.map(s => ({
-      ...s,
-      date: normalizeDate(s.date),
-      quantity: parseFloat(s.quantity) || 0,
-      selling_rate: parseFloat(s.selling_rate) || 0,
-      total_sale: parseFloat(s.total_sale) || 0
-    }));
+    const sales = salesRes.rows.map(s => {
+      const quantity = parseFloat(s.quantity) || 0;
+      const selling_rate = parseFloat(s.selling_rate) || 0;
+      const total_sale = parseFloat(s.total_sale) || 0;
+      const payment_status = s.payment_status || 'Paid';
+      let paid_amount = s.paid_amount !== null && s.paid_amount !== undefined ? parseFloat(s.paid_amount) : (payment_status === 'Paid' ? total_sale : 0);
+      let due_amount = s.due_amount !== null && s.due_amount !== undefined ? parseFloat(s.due_amount) : (payment_status === 'Due' ? total_sale : (payment_status === 'Partial' ? Math.max(0, total_sale - paid_amount) : 0));
+      return {
+        ...s,
+        date: normalizeDate(s.date),
+        quantity,
+        selling_rate,
+        total_sale,
+        payment_status,
+        paid_amount,
+        due_amount
+      };
+    });
 
     res.json({ customer, sales });
   } catch (err) {
@@ -1940,82 +1997,6 @@ app.delete('/api/product-sales/:id', authenticate, async (req, res) => {
   }
 });
 
-// =================== PRODUCT PURCHASES API (দই ও অন্যান্য পণ্য ক্রয়) ===================
-
-// GET product purchases
-app.get('/api/product-purchases', authenticate, async (req, res) => {
-  try {
-    const { limit = 100, product_id } = req.query;
-    let sql = 'SELECT * FROM product_purchases';
-    const params = [];
-    if (product_id) {
-      sql += ' WHERE product_id = ?';
-      params.push(product_id);
-    }
-    sql += ' ORDER BY date DESC, created_at DESC LIMIT ?';
-    params.push(parseInt(limit));
-    const result = await query(sql, params);
-    
-    // Summary stats
-    const statsRes = await query(`
-      SELECT 
-        COALESCE(SUM(total_amount), 0) as total_cost,
-        COALESCE(SUM(quantity), 0) as total_qty,
-        COUNT(*) as total_count
-      FROM product_purchases
-    `);
-
-    res.json({ purchases: result.rows.map(p => ({ ...p, date: normalizeDate(p.date) })), stats: statsRes.rows[0] });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Failed to fetch product purchases' });
-  }
-});
-
-// POST create product purchase
-app.post('/api/product-purchases', authenticate, async (req, res) => {
-  try {
-    const { date, product_id, product_name, quantity, unit, purchase_price, supplier_name, supplier_phone, payment_status, notes } = req.body;
-    if (!product_name) return res.status(400).json({ error: 'Product name required' });
-    if (!quantity || quantity <= 0) return res.status(400).json({ error: 'Valid quantity required' });
-    if (purchase_price < 0) return res.status(400).json({ error: 'Purchase price cannot be negative' });
-
-    const total_amount = parseFloat(quantity) * parseFloat(purchase_price);
-    const result = await query(
-      `INSERT INTO product_purchases (date, product_id, product_name, quantity, unit, purchase_price, total_amount, supplier_name, supplier_phone, payment_status, notes) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`,
-      [
-        date || new Date().toISOString().substring(0, 10),
-        product_id || null,
-        product_name.trim(),
-        parseFloat(quantity),
-        unit || 'Piece',
-        parseFloat(purchase_price) || 0,
-        total_amount,
-        supplier_name?.trim() || 'General Supplier',
-        supplier_phone || '',
-        payment_status || 'Paid',
-        notes?.trim() || ''
-      ]
-    );
-    res.status(201).json({ purchase: result.rows[0], message: 'Product purchase recorded' });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Failed to create product purchase' });
-  }
-});
-
-// DELETE product purchase
-app.delete('/api/product-purchases/:id', authenticate, async (req, res) => {
-  try {
-    await query('DELETE FROM product_purchases WHERE id = ?', [req.params.id]);
-    res.json({ message: 'Purchase deleted' });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Failed to delete product purchase' });
-  }
-});
-
 // SPA Fallback for production routing
 app.get('*', (req, res) => {
   if (req.path.startsWith('/api')) {
@@ -2031,7 +2012,7 @@ app.get('*', (req, res) => {
 
 if (!process.env.VERCEL) {
   app.listen(PORT, () => {
-    console.log(`🥛 DairyPureOrganic Milk Manager Backend running on port ${PORT}`);
+    console.log(`≡ƒÑ¢ DairyPureOrganic Milk Manager Backend running on port ${PORT}`);
   });
 }
 

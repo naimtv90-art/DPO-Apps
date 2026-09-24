@@ -29,10 +29,10 @@ const PAYMENT_METHODS: ('Cash' | 'Bank Transfer' | 'bKash' | 'Nagad' | 'Rocket' 
 ];
 
 const DEFAULT_PARTNERS: Partner[] = [
-  { id: 1, name: 'Md Naim Khan', role: 'Managing Partner (২৫%)' },
-  { id: 2, name: 'Saiful Islam Sohag', role: 'Partner / Shareholder (২৫%)' },
-  { id: 3, name: 'Monirul Islam', role: 'Partner / Shareholder (২৫%)' },
-  { id: 4, name: 'Maruf Sikder', role: 'Partner / Shareholder (২৫%)' }
+  { id: 1, name: 'Md Naim Khan', role: 'Managing Partner (αº¿αº½%)' },
+  { id: 2, name: 'Saiful Islam Sohag', role: 'Partner / Shareholder (αº¿αº½%)' },
+  { id: 3, name: 'Monirul Islam', role: 'Partner / Shareholder (αº¿αº½%)' },
+  { id: 4, name: 'Maruf Sikder', role: 'Partner / Shareholder (αº¿αº½%)' }
 ];
 
 export const AddInvestmentModal: React.FC<AddInvestmentModalProps> = ({
@@ -139,7 +139,7 @@ export const AddInvestmentModal: React.FC<AddInvestmentModalProps> = ({
                 {investmentToEdit ? 'Edit Partner Investment' : 'Add Partner Investment'}
               </h2>
               <p className="text-[11px] text-blue-100 font-medium">
-                ব্যবসায়িক পার্টনার ইনভেস্টমেন্ট রেকর্ড
+                αª¼αºìαª»αª¼αª╕αª╛αºƒαª┐αªò αª¬αª╛αª░αºìαªƒαª¿αª╛αª░ αªçαª¿αª¡αºçαª╕αºìαªƒαª«αºçαª¿αºìαªƒ αª░αºçαªòαª░αºìαªí
               </p>
             </div>
           </div>
@@ -158,7 +158,7 @@ export const AddInvestmentModal: React.FC<AddInvestmentModalProps> = ({
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
               <User className="w-3.5 h-3.5 text-blue-500" />
-              Partner Name / পার্টনারের নাম *
+              Partner Name / αª¬αª╛αª░αºìαªƒαª¿αª╛αª░αºçαª░ αª¿αª╛αª« *
             </label>
             <select
               value={partnerName}

@@ -80,10 +80,12 @@ export const SalesHistoryView: React.FC = () => {
       return;
     }
 
-    const headers = ['ID,Date,Customer Name,Quantity,Unit,Selling Rate (BDT),Total Sale (BDT),Payment Status,Phone,Address,Notes'];
-    const rows = sales.map(s => 
-      `"${s.id}","${s.date}","${s.customer_name.replace(/"/g, '""')}","${s.quantity}","${s.unit}","${s.selling_rate}","${s.total_sale}","${s.payment_status}","${(s.customer_phone || '').replace(/"/g, '""')}","${(s.customer_address || '').replace(/"/g, '""')}","${(s.notes || '').replace(/"/g, '""')}"`
-    );
+    const headers = ['ID,Date,Customer Name,Quantity,Unit,Selling Rate (BDT),Total Sale (BDT),Paid Amount (BDT),Due Amount (BDT),Payment Status,Phone,Address,Notes'];
+    const rows = sales.map(s => {
+      const paid = s.paid_amount !== undefined ? s.paid_amount : (s.payment_status === 'Paid' ? s.total_sale : 0);
+      const due = s.due_amount !== undefined ? s.due_amount : (s.payment_status === 'Due' ? s.total_sale : (s.payment_status === 'Partial' ? Math.max(0, s.total_sale - paid) : 0));
+      return `"${s.id}","${s.date}","${s.customer_name.replace(/"/g, '""')}","${s.quantity}","${s.unit}","${s.selling_rate}","${s.total_sale}","${paid}","${due}","${s.payment_status}","${(s.customer_phone || '').replace(/"/g, '""')}","${(s.customer_address || '').replace(/"/g, '""')}","${(s.notes || '').replace(/"/g, '""')}"`;
+    });
 
     const csvContent = 'data:text/csv;charset=utf-8,' + [headers, ...rows].join('\n');
     const encodedUri = encodeURI(csvContent);
@@ -336,18 +338,30 @@ export const SalesHistoryView: React.FC = () => {
                     </td>
 
                     <td className="py-3 px-4 text-center">
-                      <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                        s.payment_status === 'Paid'
-                          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
-                          : s.payment_status === 'Due'
-                          ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
-                          : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
-                      }`}>
-                        {s.payment_status === 'Paid' && <CheckCircle className="w-3 h-3" />}
-                        {s.payment_status === 'Due' && <AlertTriangle className="w-3 h-3" />}
-                        {s.payment_status === 'Partial' && <Clock className="w-3 h-3" />}
-                        {s.payment_status}
-                      </span>
+                      {s.payment_status === 'Partial' ? (
+                        <div className="inline-flex flex-col items-center gap-0.5">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                            <Clock className="w-3 h-3" />
+                            Partial
+                          </span>
+                          <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold tabular-nums">
+                            জমা: {formatCurrency(s.paid_amount ?? 0)}
+                          </span>
+                          <span className="text-[10px] text-rose-600 dark:text-rose-400 font-black tabular-nums">
+                            বকেয়া: {formatCurrency(s.due_amount ?? (s.total_sale - (s.paid_amount ?? 0)))}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                          s.payment_status === 'Paid'
+                            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                            : 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
+                        }`}>
+                          {s.payment_status === 'Paid' && <CheckCircle className="w-3 h-3" />}
+                          {s.payment_status === 'Due' && <AlertTriangle className="w-3 h-3" />}
+                          {s.payment_status}
+                        </span>
+                      )}
                     </td>
 
                     <td className="py-3 px-4 text-center no-print">
@@ -457,8 +471,28 @@ export const SalesHistoryView: React.FC = () => {
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-400">Payment Status:</span>
-                <span className="font-bold text-slate-800 dark:text-slate-200">{viewSale.payment_status}</span>
+                <span className={`font-bold ${
+                  viewSale.payment_status === 'Paid'
+                    ? 'text-emerald-600'
+                    : viewSale.payment_status === 'Due'
+                    ? 'text-rose-600'
+                    : 'text-amber-600'
+                }`}>
+                  {viewSale.payment_status}
+                </span>
               </div>
+              {viewSale.payment_status === 'Partial' && (
+                <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 space-y-1.5">
+                  <div className="flex justify-between text-emerald-700 dark:text-emerald-400 font-bold">
+                    <span>পরিশোধিত টাকা (Paid):</span>
+                    <span>{formatCurrency(viewSale.paid_amount ?? 0)}</span>
+                  </div>
+                  <div className="flex justify-between text-rose-700 dark:text-rose-400 font-bold">
+                    <span>বকেয়া পরিমাণ (Due):</span>
+                    <span>{formatCurrency(viewSale.due_amount ?? (viewSale.total_sale - (viewSale.paid_amount ?? 0)))}</span>
+                  </div>
+                </div>
+              )}
               <div className="flex justify-between pt-2 border-t border-slate-100 dark:border-slate-800">
                 <span className="text-slate-400">Total Sale Amount:</span>
                 <span className="font-black text-sky-600 dark:text-sky-400 text-base">{formatCurrency(viewSale.total_sale)}</span>

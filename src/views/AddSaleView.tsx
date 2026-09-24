@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { api } from '../services/api';
 import { Customer, MilkSale } from '../types';
-import { ShoppingCart, Calculator, Calendar, User, Phone, MapPin, FileText, ArrowRight, AlertCircle, CheckCircle } from 'lucide-react';
+import { ShoppingCart, Calculator, Calendar, User, Phone, MapPin, FileText, ArrowRight, AlertCircle, CheckCircle, Clock } from 'lucide-react';
 
 export const AddSaleView: React.FC = () => {
   const { settings, showToast, triggerRefresh, currency, formatCurrency, setActiveView } = useApp();
@@ -16,6 +16,8 @@ export const AddSaleView: React.FC = () => {
   const [unit, setUnit] = useState<'Liter' | 'KG'>(settings.default_unit || 'Liter');
   const [sellingRate, setSellingRate] = useState(settings.default_selling_rate || '85');
   const [paymentStatus, setPaymentStatus] = useState<'Paid' | 'Due' | 'Partial'>('Paid');
+  const [paidAmount, setPaidAmount] = useState<string>('');
+  const [paidQuantity, setPaidQuantity] = useState<string>('');
   const [notes, setNotes] = useState('');
 
   const [customersList, setCustomersList] = useState<Customer[]>([]);
@@ -36,6 +38,54 @@ export const AddSaleView: React.FC = () => {
   const parsedRate = parseFloat(sellingRate) || 0;
   const calculatedTotal = parsedQty * parsedRate;
   const isStockInsufficient = parsedQty > availableStock;
+
+  const currentPaidAmount = paymentStatus === 'Paid'
+    ? calculatedTotal
+    : paymentStatus === 'Due'
+    ? 0
+    : Math.max(0, Math.min(calculatedTotal, parseFloat(paidAmount) || 0));
+
+  const currentDueAmount = Math.max(0, calculatedTotal - currentPaidAmount);
+
+  const handlePaymentStatusChange = (status: 'Paid' | 'Due' | 'Partial') => {
+    setPaymentStatus(status);
+    if (status === 'Partial') {
+      const defaultPaidQty = parseFloat((parsedQty / 2).toFixed(1)) || 1;
+      const defaultPaidAmt = Math.round(defaultPaidQty * parsedRate);
+      setPaidQuantity(String(defaultPaidQty));
+      setPaidAmount(String(defaultPaidAmt));
+    } else if (status === 'Paid') {
+      setPaidAmount(String(calculatedTotal));
+      setPaidQuantity(String(parsedQty));
+    } else {
+      setPaidAmount('0');
+      setPaidQuantity('0');
+    }
+  };
+
+  const handlePaidAmountChange = (val: string) => {
+    setPaidAmount(val);
+    const amt = parseFloat(val);
+    if (!isNaN(amt) && parsedRate > 0) {
+      const calcQty = (amt / parsedRate).toFixed(2);
+      setPaidQuantity(String(parseFloat(calcQty)));
+    } else {
+      setPaidQuantity('');
+    }
+  };
+
+  const handlePaidQuantityChange = (val: string) => {
+    setPaidQuantity(val);
+    const q = parseFloat(val);
+    if (!isNaN(q) && parsedRate > 0) {
+      const calcAmt = Math.round(q * parsedRate);
+      setPaidAmount(String(calcAmt));
+    } else {
+      setPaidAmount('');
+    }
+  };
+
+  const quickQtyPresets = [0.5, 1, 2, 3, 5, 10, 15, 20, 25, 50].filter(q => q > 0 && q < parsedQty).slice(0, 4);
 
   const handleCustomerSelect = (idStr: string) => {
     setCustomerId(idStr);
@@ -71,6 +121,8 @@ export const AddSaleView: React.FC = () => {
         unit,
         selling_rate: parsedRate,
         payment_status: paymentStatus,
+        paid_amount: currentPaidAmount,
+        due_amount: currentDueAmount,
         customer_phone: customerPhone,
         customer_address: customerAddress,
         notes: notes.trim(),
@@ -260,15 +312,134 @@ export const AddSaleView: React.FC = () => {
               </label>
               <select
                 value={paymentStatus}
-                onChange={e => setPaymentStatus(e.target.value as any)}
+                onChange={e => handlePaymentStatusChange(e.target.value as any)}
                 className="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm font-semibold focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 outline-none transition"
               >
                 <option value="Paid">Paid (Cash / bKash / Card)</option>
                 <option value="Due">Due (Receivable)</option>
-                <option value="Partial">Partial Payment</option>
+                <option value="Partial">Partial Payment (আংশিক পরিশোধ)</option>
               </select>
             </div>
           </div>
+
+          {/* Partial Payment Configuration Box */}
+          {paymentStatus === 'Partial' && (
+            <div className="p-4 sm:p-5 rounded-2xl bg-amber-50/80 dark:bg-amber-950/30 border-2 border-amber-300 dark:border-amber-800/70 space-y-4 animate-fadeIn shadow-xs">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 rounded-xl bg-amber-500/20 text-amber-700 dark:text-amber-400">
+                    <Clock className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-amber-900 dark:text-amber-200">
+                      আংশিক পরিশোধের হিসাব (Partial Payment)
+                    </h4>
+                    <p className="text-xs text-amber-700 dark:text-amber-400">
+                      কত টাকা দিল অথবা কত {unit}-এর টাকা দিল তা লিখুন (অন্যটি অটো হিসেব হবে)
+                    </p>
+                  </div>
+                </div>
+                <span className="text-xs font-bold px-3 py-1 rounded-full bg-amber-200/70 dark:bg-amber-900/60 text-amber-900 dark:text-amber-200">
+                  Partial Payment
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1.5 flex items-center justify-between">
+                    <span>পরিশোধিত টাকা / Paid Amount ({currency}) *</span>
+                    <span className="text-[11px] text-slate-500 font-normal">টাকার পরিমাণ</span>
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">{currency}</span>
+                    <input
+                      type="number"
+                      step="1"
+                      min="0"
+                      max={calculatedTotal}
+                      placeholder="e.g. 500"
+                      value={paidAmount}
+                      onChange={e => handlePaidAmountChange(e.target.value)}
+                      className="w-full pl-8 pr-4 py-2.5 rounded-xl border border-amber-300 dark:border-amber-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm font-bold tabular-nums focus:ring-2 focus:ring-amber-500/30 outline-none transition"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1.5 flex items-center justify-between">
+                    <span>কত {unit}-এর টাকা পরিশোধ করল?</span>
+                    <span className="text-[11px] text-slate-500 font-normal">পরিমাণ ({unit})</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      max={parsedQty}
+                      placeholder={`e.g. ${parsedQty > 5 ? 5 : (parsedQty / 2).toFixed(1)}`}
+                      value={paidQuantity}
+                      onChange={e => handlePaidQuantityChange(e.target.value)}
+                      className="w-full pl-4 pr-12 py-2.5 rounded-xl border border-amber-300 dark:border-amber-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm font-bold tabular-nums focus:ring-2 focus:ring-amber-500/30 outline-none transition"
+                    />
+                    <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-xs">{unit}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Quick Presets for Quantity / Amount */}
+              <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 mr-1">কুইক সিলেক্ট:</span>
+                {quickQtyPresets.map(presetQty => (
+                  <button
+                    key={presetQty}
+                    type="button"
+                    onClick={() => handlePaidQuantityChange(String(presetQty))}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition ${
+                      parseFloat(paidQuantity) === presetQty
+                        ? 'bg-amber-600 border-amber-600 text-white shadow-xs'
+                        : 'border-amber-300/80 dark:border-amber-800/80 bg-white dark:bg-slate-800 text-amber-900 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/40'
+                    }`}
+                  >
+                    {presetQty} {unit} ({formatCurrency(presetQty * parsedRate)})
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => handlePaidAmountChange(String(Math.round(calculatedTotal * 0.5)))}
+                  className="px-2.5 py-1 rounded-lg text-xs font-bold border border-amber-300/80 dark:border-amber-800/80 bg-white dark:bg-slate-800 text-amber-900 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/40 transition"
+                >
+                  ৫০% (অর্ধেক = {formatCurrency(calculatedTotal * 0.5)})
+                </button>
+              </div>
+
+              {/* Real-time Paid vs Due Breakdown Box */}
+              <div className="grid grid-cols-2 gap-3 pt-2 border-t border-amber-200/80 dark:border-amber-800/60">
+                <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-center">
+                  <span className="text-[11px] uppercase font-bold text-emerald-700 dark:text-emerald-400 block">
+                    ✓ নগদ জমা / পরিশোধ (Paid)
+                  </span>
+                  <span className="text-lg font-black text-emerald-800 dark:text-emerald-300 tabular-nums block">
+                    {formatCurrency(currentPaidAmount)}
+                  </span>
+                  <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium block">
+                    (~{(currentPaidAmount / (parsedRate || 1)).toFixed(1)} {unit}-এর মূল্য)
+                  </span>
+                </div>
+
+                <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-center">
+                  <span className="text-[11px] uppercase font-bold text-rose-700 dark:text-rose-400 block">
+                    ⏳ বাকি / বকেয়া (Remaining Due)
+                  </span>
+                  <span className="text-lg font-black text-rose-800 dark:text-rose-300 tabular-nums block">
+                    {formatCurrency(currentDueAmount)}
+                  </span>
+                  <span className="text-[11px] text-rose-600 dark:text-rose-400 font-medium block">
+                    (~{(currentDueAmount / (parsedRate || 1)).toFixed(1)} {unit}-এর বকেয়া)
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>

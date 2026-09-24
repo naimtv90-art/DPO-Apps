@@ -63,6 +63,8 @@ CREATE TABLE IF NOT EXISTS milk_sales (
   customer_phone VARCHAR(50),
   customer_address TEXT,
   payment_status VARCHAR(50) DEFAULT 'Paid',
+  paid_amount NUMERIC(12, 2) DEFAULT 0,
+  due_amount NUMERIC(12, 2) DEFAULT 0,
   notes TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );

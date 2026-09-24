@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { api } from '../services/api';
 import { Supplier, MilkPurchase } from '../types';
-import { ShoppingBag, Calculator, Calendar, User, Phone, MapPin, FileText, ArrowRight } from 'lucide-react';
+import { ShoppingBag, Calculator, Calendar, User, Phone, MapPin, FileText, ArrowRight, Package } from 'lucide-react';
 
 export const AddPurchaseView: React.FC = () => {
   const { settings, showToast, triggerRefresh, currency, formatCurrency, setActiveView } = useApp();

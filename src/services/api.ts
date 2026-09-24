@@ -12,8 +12,7 @@ import {
   AppSettings,
   User,
   Product,
-  ProductSale,
-  ProductPurchase
+  ProductSale
 } from '../types';
 
 export const getBaseUrl = (): string => {
@@ -453,34 +452,6 @@ export const api = {
   deleteProductSale: async (id: number): Promise<{ message: string }> => {
     const token = localStorage.getItem('dpo_token');
     const res = await fetch(`${getBaseUrl()}/product-sales/${id}`, {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${token}` }
-    });
-    return handleResponse(res);
-  },
-
-  // Product Purchases (দই ক্রয়)
-  getProductPurchases: async (): Promise<{ purchases: ProductPurchase[]; stats: any }> => {
-    const token = localStorage.getItem('dpo_token');
-    const res = await fetch(`${getBaseUrl()}/product-purchases`, {
-      headers: { Authorization: `Bearer ${token}` }
-    });
-    return handleResponse(res);
-  },
-
-  createProductPurchase: async (data: Partial<ProductPurchase>): Promise<{ purchase: ProductPurchase; message: string }> => {
-    const token = localStorage.getItem('dpo_token');
-    const res = await fetch(`${getBaseUrl()}/product-purchases`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify(data)
-    });
-    return handleResponse(res);
-  },
-
-  deleteProductPurchase: async (id: number): Promise<{ message: string }> => {
-    const token = localStorage.getItem('dpo_token');
-    const res = await fetch(`${getBaseUrl()}/product-purchases/${id}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${token}` }
     });

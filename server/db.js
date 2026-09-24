@@ -170,6 +170,8 @@ export async function initDatabase() {
         customer_phone VARCHAR(50),
         customer_address TEXT,
         payment_status VARCHAR(50) DEFAULT 'Paid',
+        paid_amount NUMERIC(12, 2) DEFAULT 0,
+        due_amount NUMERIC(12, 2) DEFAULT 0,
         notes TEXT,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
@@ -353,6 +355,8 @@ export async function initDatabase() {
         customer_phone TEXT,
         customer_address TEXT,
         payment_status TEXT DEFAULT 'Paid',
+        paid_amount REAL DEFAULT 0,
+        due_amount REAL DEFAULT 0,
         notes TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (customer_id) REFERENCES customers(id)
@@ -463,6 +467,25 @@ export async function initDatabase() {
       CREATE INDEX IF NOT EXISTS idx_product_sales_date ON product_sales(date DESC);
       CREATE INDEX IF NOT EXISTS idx_product_purchases_date ON product_purchases(date DESC);
     `);
+  }
+
+  // Auto-migration: Ensure milk_sales has paid_amount and due_amount columns
+  try {
+    if (isPostgres) {
+      await query(`ALTER TABLE milk_sales ADD COLUMN IF NOT EXISTS paid_amount NUMERIC(12, 2) DEFAULT 0;`);
+      await query(`ALTER TABLE milk_sales ADD COLUMN IF NOT EXISTS due_amount NUMERIC(12, 2) DEFAULT 0;`);
+    } else {
+      const cols = await query(`PRAGMA table_info(milk_sales)`);
+      const colNames = (cols.rows || []).map(c => c.name);
+      if (!colNames.includes('paid_amount')) {
+        await query(`ALTER TABLE milk_sales ADD COLUMN paid_amount REAL DEFAULT 0`);
+      }
+      if (!colNames.includes('due_amount')) {
+        await query(`ALTER TABLE milk_sales ADD COLUMN due_amount REAL DEFAULT 0`);
+      }
+    }
+  } catch (migErr) {
+    console.warn('Migration note for milk_sales paid/due amounts:', migErr.message);
   }
 
   // Seed default admin user

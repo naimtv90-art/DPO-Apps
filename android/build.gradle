@@ -22,6 +22,7 @@ allprojects {
         google()
         mavenCentral()
     }
+    layout.buildDirectory = file("C:/Users/Public/dpo_build/${project.name}")
 }
 
 task clean(type: Delete) {

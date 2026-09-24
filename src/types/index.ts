@@ -55,6 +55,8 @@ export interface MilkSale {
   unit: 'Liter' | 'KG';
   selling_rate: number;
   total_sale: number;
+  paid_amount?: number;
+  due_amount?: number;
   customer_phone?: string;
   customer_address?: string;
   payment_status: 'Paid' | 'Due' | 'Partial';
