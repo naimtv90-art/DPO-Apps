@@ -15,7 +15,6 @@ import {
   User, 
   Phone, 
   FileText, 
-  TrendingUp, 
   Truck,
   ArrowDownCircle,
   ArrowUpCircle,
@@ -23,18 +22,20 @@ import {
   Sparkles,
   Search,
   Clock,
+  Layers,
   CheckCircle2,
-  AlertCircle
+  TrendingUp,
+  Tag
 } from 'lucide-react';
 
 const COMMON_PRESETS = [
-  { name: 'দেশি ঘি (Ghee)', unit: 'KG', price: '1400' },
-  { name: 'খাঁটি মাখন (Butter)', unit: 'KG', price: '900' },
-  { name: 'তাজা পনির (Paneer)', unit: 'KG', price: '750' },
-  { name: 'স্পেশাল দই (Curd)', unit: 'Piece', price: '250' },
-  { name: 'মিষ্টি (Sweets)', unit: 'KG', price: '450' },
-  { name: 'মাঠা / ঘোল (Ghol)', unit: 'Liter', price: '80' },
-  { name: 'ছানা (Chhena)', unit: 'KG', price: '380' },
+  { name: 'দেশি ঘি (Ghee)', unit: 'KG', price: '1400', purchasePrice: '1200' },
+  { name: 'খাঁটি মাখন (Butter)', unit: 'KG', price: '900', purchasePrice: '750' },
+  { name: 'তাজা পনির (Paneer)', unit: 'KG', price: '750', purchasePrice: '620' },
+  { name: 'স্পেশাল দই (Curd)', unit: 'Piece', price: '250', purchasePrice: '190' },
+  { name: 'মিষ্টি (Sweets)', unit: 'KG', price: '450', purchasePrice: '350' },
+  { name: 'মাঠা / ঘোল (Ghol)', unit: 'Liter', price: '80', purchasePrice: '60' },
+  { name: 'ছানা (Chhena)', unit: 'KG', price: '380', purchasePrice: '310' },
 ];
 
 export const ProductsView: React.FC = () => {
@@ -49,14 +50,28 @@ export const ProductsView: React.FC = () => {
   const [suppliersList, setSuppliersList] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Tab: 'add-purchase' | 'add-sale' | 'purchase-history' | 'sales-history' | 'catalog'
-  const [activeTab, setActiveTab] = useState<'add-purchase' | 'add-sale' | 'purchase-history' | 'sales-history' | 'catalog'>('add-purchase');
+  // Tab: 'catalog' | 'add-purchase' | 'add-sale' | 'purchase-history' | 'sales-history'
+  const [activeTab, setActiveTab] = useState<'catalog' | 'add-purchase' | 'add-sale' | 'purchase-history' | 'sales-history'>('catalog');
 
   // Modal / Add Product state
   const [showAddProductModal, setShowAddProductModal] = useState(false);
   const [modalTargetContext, setModalTargetContext] = useState<'purchase' | 'sale' | 'catalog'>('catalog');
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-  const [newProduct, setNewProduct] = useState({ name: '', unit: 'KG', default_price: '', description: '' });
+  
+  // Rich new product state with purchase/stock capability
+  const [newProduct, setNewProduct] = useState({
+    name: '',
+    unit: 'KG',
+    default_price: '',
+    purchase_price: '',
+    initial_qty: '',
+    supplier_name: '',
+    supplier_phone: '',
+    payment_status: 'Paid' as 'Paid' | 'Due' | 'Partial',
+    paid_amount: '',
+    description: ''
+  });
+  
   const [savingProduct, setSavingProduct] = useState(false);
   const [catalogSearch, setCatalogSearch] = useState('');
 
@@ -111,16 +126,77 @@ export const ProductsView: React.FC = () => {
   // Quick Open Modal
   const openAddProductModal = (context: 'purchase' | 'sale' | 'catalog') => {
     setModalTargetContext(context);
-    setNewProduct({ name: '', unit: 'KG', default_price: '', description: '' });
+    setNewProduct({
+      name: '',
+      unit: 'KG',
+      default_price: '',
+      purchase_price: '',
+      initial_qty: '',
+      supplier_name: '',
+      supplier_phone: '',
+      payment_status: 'Paid',
+      paid_amount: '',
+      description: ''
+    });
     setShowAddProductModal(true);
+  };
+
+  // Helper: Calculate stock & stats per product
+  const getProductMetrics = (product: Product) => {
+    const prodPurchases = purchases.filter(pur => 
+      pur.product_id === product.id || 
+      (pur.product_name && pur.product_name.trim().toLowerCase() === product.name.trim().toLowerCase())
+    );
+    const prodSales = sales.filter(s => 
+      s.product_id === product.id || 
+      (s.product_name && s.product_name.trim().toLowerCase() === product.name.trim().toLowerCase())
+    );
+
+    const totalPurchasedQty = prodPurchases.reduce((sum, p) => sum + (parseFloat(String(p.quantity)) || 0), 0);
+    const totalSoldQty = prodSales.reduce((sum, s) => sum + (parseFloat(String(s.quantity)) || 0), 0);
+    const stock = Math.max(0, totalPurchasedQty - totalSoldQty);
+
+    const totalCost = prodPurchases.reduce((sum, p) => sum + (parseFloat(String(p.total_amount)) || 0), 0);
+    const totalRevenue = prodSales.reduce((sum, s) => sum + (parseFloat(String(s.total_amount)) || 0), 0);
+
+    const lastPur = prodPurchases.length > 0 ? prodPurchases[0] : null;
+    const lastSupplier = lastPur ? (lastPur.supplier_name || 'General Supplier') : '—';
+    const lastPhone = lastPur ? lastPur.supplier_phone : '';
+    const lastPurchasePrice = lastPur ? lastPur.purchase_price : null;
+
+    return {
+      totalPurchasedQty,
+      totalSoldQty,
+      stock,
+      totalCost,
+      totalRevenue,
+      lastSupplier,
+      lastPhone,
+      lastPurchasePrice,
+      purchasesCount: prodPurchases.length,
+      salesCount: prodSales.length
+    };
   };
 
   // Purchase Calculations
   const handlePurchaseProductSelect = (idStr: string) => {
     setSelectedPurchaseProductId(idStr);
+    const prod = products.find(p => String(p.id) === idStr);
+    if (prod) {
+      const metrics = getProductMetrics(prod);
+      if (metrics.lastPurchasePrice) {
+        setPurchasePrice(String(metrics.lastPurchasePrice));
+      }
+      if (metrics.lastSupplier && metrics.lastSupplier !== '—') {
+        setPurchaseSupplier(metrics.lastSupplier);
+        if (metrics.lastPhone) setPurchasePhone(metrics.lastPhone);
+      }
+    }
   };
 
   const selectedPurchaseProduct = products.find(p => String(p.id) === selectedPurchaseProductId);
+  const selectedPurchaseMetrics = selectedPurchaseProduct ? getProductMetrics(selectedPurchaseProduct) : null;
+
   const parsedPurchaseQty = parseFloat(purchaseQty) || 0;
   const parsedPurchasePrice = parseFloat(purchasePrice) || 0;
   const purchaseTotal = parsedPurchaseQty * parsedPurchasePrice;
@@ -154,6 +230,8 @@ export const ProductsView: React.FC = () => {
   };
 
   const selectedSaleProduct = products.find(p => String(p.id) === selectedSaleProductId);
+  const selectedSaleMetrics = selectedSaleProduct ? getProductMetrics(selectedSaleProduct) : null;
+
   const parsedSaleQty = parseFloat(saleQty) || 0;
   const parsedSalePrice = parseFloat(salePrice) || 0;
   const saleTotal = parsedSaleQty * parsedSalePrice;
@@ -175,6 +253,30 @@ export const ProductsView: React.FC = () => {
     } else {
       setSalePaidAmount('0');
     }
+  };
+
+  // Quick Action from Catalog
+  const handleQuickBuy = (product: Product) => {
+    setSelectedPurchaseProductId(String(product.id));
+    const metrics = getProductMetrics(product);
+    if (metrics.lastPurchasePrice) {
+      setPurchasePrice(String(metrics.lastPurchasePrice));
+    } else {
+      setPurchasePrice('');
+    }
+    if (metrics.lastSupplier && metrics.lastSupplier !== '—') {
+      setPurchaseSupplier(metrics.lastSupplier);
+      if (metrics.lastPhone) setPurchasePhone(metrics.lastPhone);
+    }
+    setActiveTab('add-purchase');
+  };
+
+  const handleQuickSell = (product: Product) => {
+    setSelectedSaleProductId(String(product.id));
+    if (product.default_price) {
+      setSalePrice(String(product.default_price));
+    }
+    setActiveTab('add-sale');
   };
 
   // Handle Add Purchase
@@ -284,43 +386,87 @@ export const ProductsView: React.FC = () => {
     if (!newProduct.name.trim()) return showToast('পণ্যের নাম দিন', 'warning');
     try {
       setSavingProduct(true);
+      
+      // 1. Create Product
       const res = await api.createProduct({ 
         name: newProduct.name.trim(), 
         unit: newProduct.unit, 
         default_price: parseFloat(newProduct.default_price) || 0, 
         description: newProduct.description.trim() 
       });
-      showToast('নতুন পণ্য যুক্ত হয়েছে ✅', 'success');
       
-      const createdId = res?.product?.id || (res as any)?.id;
+      const createdProduct = (res as any)?.product || res;
+      const createdId = createdProduct?.id;
 
-      // Refresh list
-      const pRes = await api.getProducts();
-      const updatedProducts = pRes.products || [];
-      setProducts(updatedProducts);
+      // 2. If Initial Purchase / Quantity is entered, automatically create purchase record!
+      const initialQty = parseFloat(newProduct.initial_qty) || 0;
+      const buyRate = parseFloat(newProduct.purchase_price) || 0;
+
+      if (initialQty > 0) {
+        const totalInitialCost = initialQty * buyRate;
+        let initialPaid = totalInitialCost;
+        let initialDue = 0;
+
+        if (newProduct.payment_status === 'Paid') {
+          initialPaid = totalInitialCost;
+          initialDue = 0;
+        } else if (newProduct.payment_status === 'Due') {
+          initialPaid = 0;
+          initialDue = totalInitialCost;
+        } else if (newProduct.payment_status === 'Partial') {
+          initialPaid = Math.max(0, Math.min(totalInitialCost, parseFloat(newProduct.paid_amount) || 0));
+          initialDue = Math.max(0, totalInitialCost - initialPaid);
+        }
+
+        await api.createProductPurchase({
+          date: new Date().toISOString().split('T')[0],
+          product_id: createdId || undefined,
+          product_name: newProduct.name.trim(),
+          quantity: initialQty,
+          unit: newProduct.unit,
+          purchase_price: buyRate,
+          supplier_name: newProduct.supplier_name.trim() || 'General Supplier',
+          supplier_phone: newProduct.supplier_phone.trim(),
+          payment_status: newProduct.payment_status,
+          paid_amount: initialPaid,
+          due_amount: initialDue,
+          notes: 'নতুন পণ্য খোলার সময় প্রারম্ভিক স্টক এন্ট্রি'
+        });
+
+        showToast(`'${newProduct.name}' পণ্য এবং ${initialQty} ${newProduct.unit} স্টক সফলভাবে যোগ হয়েছে! ✅`, 'success');
+      } else {
+        showToast(`'${newProduct.name}' নতুন পণ্য যুক্ত হয়েছে ✅`, 'success');
+      }
+
+      // Refresh data
+      await fetchAll();
+      triggerRefresh();
 
       // Automatically select in the active context
       if (createdId) {
         if (modalTargetContext === 'purchase') {
           setSelectedPurchaseProductId(String(createdId));
+          if (newProduct.purchase_price) setPurchasePrice(String(newProduct.purchase_price));
+          if (newProduct.supplier_name) setPurchaseSupplier(newProduct.supplier_name);
+          if (newProduct.supplier_phone) setPurchasePhone(newProduct.supplier_phone);
         } else if (modalTargetContext === 'sale') {
           setSelectedSaleProductId(String(createdId));
-          if (newProduct.default_price) {
-            setSalePrice(String(newProduct.default_price));
-          }
-        }
-      } else if (updatedProducts.length > 0) {
-        const found = updatedProducts.find(p => p.name.toLowerCase() === newProduct.name.trim().toLowerCase());
-        if (found) {
-          if (modalTargetContext === 'purchase') setSelectedPurchaseProductId(String(found.id));
-          if (modalTargetContext === 'sale') {
-            setSelectedSaleProductId(String(found.id));
-            if (found.default_price) setSalePrice(String(found.default_price));
-          }
+          if (newProduct.default_price) setSalePrice(String(newProduct.default_price));
         }
       }
 
-      setNewProduct({ name: '', unit: 'KG', default_price: '', description: '' });
+      setNewProduct({
+        name: '',
+        unit: 'KG',
+        default_price: '',
+        purchase_price: '',
+        initial_qty: '',
+        supplier_name: '',
+        supplier_phone: '',
+        payment_status: 'Paid',
+        paid_amount: '',
+        description: ''
+      });
       setShowAddProductModal(false);
     } catch (err: any) {
       showToast(err.message || 'পণ্য তৈরিতে সমস্যা হয়েছে', 'error');
@@ -369,7 +515,7 @@ export const ProductsView: React.FC = () => {
   );
 
   return (
-    <div className="max-w-4xl mx-auto space-y-5 pb-12">
+    <div className="max-w-4xl mx-auto space-y-5 pb-16">
       {/* Header Banner */}
       <div className="p-5 rounded-3xl bg-gradient-to-r from-purple-700 via-indigo-700 to-purple-800 text-white shadow-xl">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -379,13 +525,13 @@ export const ProductsView: React.FC = () => {
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-xl sm:text-2xl font-black tracking-tight">পণ্য ব্যবস্থাপনা ও ক্রয়-বিক্রয়</h1>
+                <h1 className="text-xl sm:text-2xl font-black tracking-tight">পণ্য ব্যবস্থাপনা ও স্টক হাব</h1>
                 <span className="px-2 py-0.5 rounded-full bg-purple-500/30 text-[10px] uppercase font-black tracking-wider border border-purple-300/20">
                   Products Hub
                 </span>
               </div>
               <p className="text-xs text-purple-200 mt-0.5">
-                ঘি, মাখন, পনির, দই, মিষ্টি ইত্যাদি যেকোনো পণ্য যোগ ও আংশিক/নগদ/বাকি হিসাব রাখুন
+                ঘি, মাখন, পনির, দই, মিষ্টি ইত্যাদি যেকোনো পণ্য যোগ, স্টক ও ক্রয়-বিক্রয় হিসাব
               </p>
             </div>
           </div>
@@ -416,11 +562,11 @@ export const ProductsView: React.FC = () => {
       {/* Tabs */}
       <div className="flex flex-wrap gap-1.5 bg-slate-100 dark:bg-slate-800/80 p-1.5 rounded-2xl border border-slate-200/60 dark:border-slate-700">
         {[
+          { key: 'catalog', label: '📦 পণ্য তালিকা ও স্টক', icon: Package, color: 'text-blue-600 dark:text-blue-400' },
           { key: 'add-purchase', label: '+ ক্রয় যোগ (কেনা)', icon: ShoppingBag, color: 'text-rose-600 dark:text-rose-400' },
           { key: 'add-sale', label: '+ বিক্রয় যোগ (বেচা)', icon: ShoppingCart, color: 'text-purple-600 dark:text-purple-400' },
           { key: 'purchase-history', label: 'ক্রয় ইতিহাস', icon: ArrowDownCircle, color: 'text-amber-600 dark:text-amber-400' },
           { key: 'sales-history', label: 'বিক্রয় ইতিহাস', icon: ArrowUpCircle, color: 'text-emerald-600 dark:text-emerald-400' },
-          { key: 'catalog', label: 'পণ্য তালিকা (Catalog)', icon: Package, color: 'text-blue-600 dark:text-blue-400' },
         ].map(({ key, label, icon: Icon, color }) => (
           <button
             key={key}
@@ -437,7 +583,227 @@ export const ProductsView: React.FC = () => {
         ))}
       </div>
 
-      {/* 1. ADD PURCHASE TAB (পণ্য ক্রয় যোগ) */}
+      {/* 1. CATALOG & STOCK TAB (পণ্য তালিকা ও স্টক) */}
+      {activeTab === 'catalog' && (
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+            <div className="flex-1 relative">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input 
+                type="text" 
+                value={catalogSearch}
+                onChange={e => setCatalogSearch(e.target.value)}
+                placeholder="পণ্য খুঁজুন (নাম বা বিবরণ)..."
+                className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm text-slate-900 dark:text-white outline-none focus:border-purple-500"
+              />
+            </div>
+            <button 
+              onClick={() => openAddProductModal('catalog')}
+              className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold transition shadow-lg shadow-purple-600/30 shrink-0"
+            >
+              <Plus className="w-4 h-4" /> + নতুন পণ্য যোগ করুন
+            </button>
+          </div>
+
+          {/* Product Stock Cards */}
+          <div className="space-y-3">
+            {loading ? (
+              <div className="p-8 text-center text-slate-400 text-sm">লোড হচ্ছে...</div>
+            ) : filteredProducts.length === 0 ? (
+              <div className="p-8 text-center bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 text-slate-400 text-sm space-y-3">
+                <Package className="w-12 h-12 mx-auto text-purple-300" />
+                <p className="font-semibold text-slate-700 dark:text-slate-300">কোনো পণ্য পাওয়া যায়নি!</p>
+                <p className="text-xs text-slate-400">নতুন যেকোনো পণ্য (ঘি, মাখন, পনির ইত্যাদি) স্টক ও কার কাছ থেকে কিনলেন তা সহ যোগ করতে নিচের বাটনে চাপুন।</p>
+                <button 
+                  onClick={() => openAddProductModal('catalog')}
+                  className="px-5 py-2.5 rounded-xl bg-purple-600 text-white text-xs font-bold inline-flex items-center gap-1.5 shadow-md hover:bg-purple-700 transition"
+                >
+                  <PlusCircle className="w-4 h-4" /> + নতুন পণ্য তৈরি করুন
+                </button>
+              </div>
+            ) : filteredProducts.map(p => {
+              const metrics = getProductMetrics(p);
+              const isLowStock = metrics.stock <= 0;
+
+              return (
+                <div key={p.id} className="p-4 sm:p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm transition hover:border-purple-300 dark:hover:border-purple-800 space-y-3">
+                  {editingProduct?.id === p.id ? (
+                    <form onSubmit={handleUpdateProduct} className="space-y-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-500 mb-1">পণ্যের নাম *</label>
+                          <input 
+                            type="text" 
+                            value={editingProduct.name} 
+                            onChange={e => setEditingProduct(ep => ep ? { ...ep, name: e.target.value } : ep)} 
+                            required
+                            className="w-full px-3 py-2 rounded-xl border border-purple-300 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white outline-none" 
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-500 mb-1">একক (Unit)</label>
+                          <select 
+                            value={editingProduct.unit} 
+                            onChange={e => setEditingProduct(ep => ep ? { ...ep, unit: e.target.value } : ep)}
+                            className="w-full px-3 py-2 rounded-xl border border-purple-300 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white outline-none"
+                          >
+                            <option value="KG">KG (কেজি)</option>
+                            <option value="Liter">Liter (লিটার)</option>
+                            <option value="Piece">Piece (পিস / পাত্র)</option>
+                            <option value="Pack">Pack (প্যাকেট)</option>
+                            <option value="Box">Box (বাক্স)</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-500 mb-1">ডিফল্ট বিক্রয় দর ({currency})</label>
+                          <input 
+                            type="number" 
+                            value={editingProduct.default_price} 
+                            onChange={e => setEditingProduct(ep => ep ? { ...ep, default_price: parseFloat(e.target.value) || 0 } : ep)}
+                            className="w-full px-3 py-2 rounded-xl border border-purple-300 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white outline-none" 
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-500 mb-1">বিবরণ</label>
+                          <input 
+                            type="text" 
+                            value={editingProduct.description || ''} 
+                            onChange={e => setEditingProduct(ep => ep ? { ...ep, description: e.target.value } : ep)}
+                            placeholder="বিবরণ" 
+                            className="w-full px-3 py-2 rounded-xl border border-purple-300 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white outline-none" 
+                          />
+                        </div>
+                      </div>
+                      <div className="flex gap-2 justify-end">
+                        <button type="submit" className="px-3.5 py-1.5 rounded-xl bg-purple-600 text-white text-xs font-bold flex items-center gap-1">
+                          <Save className="w-3.5 h-3.5" /> সেভ
+                        </button>
+                        <button type="button" onClick={() => setEditingProduct(null)} className="px-3.5 py-1.5 rounded-xl bg-slate-200 dark:bg-slate-700 text-xs font-bold flex items-center gap-1">
+                          <X className="w-3.5 h-3.5" /> বাতিল
+                        </button>
+                      </div>
+                    </form>
+                  ) : (
+                    <div>
+                      {/* Product Card Top Header */}
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-black text-lg text-slate-900 dark:text-white">{p.name}</span>
+                            <span className="px-2.5 py-0.5 rounded-lg bg-purple-100 dark:bg-purple-950/80 text-purple-700 dark:text-purple-300 text-xs font-bold border border-purple-200 dark:border-purple-800">
+                              {p.unit}
+                            </span>
+                            <span className={`px-2.5 py-0.5 rounded-lg text-xs font-black flex items-center gap-1 ${
+                              isLowStock 
+                                ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/80 dark:text-rose-400 border border-rose-200 dark:border-rose-800' 
+                                : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
+                            }`}>
+                              <Layers className="w-3 h-3" />
+                              বর্তমান স্টক: {metrics.stock.toFixed(1)} {p.unit}
+                            </span>
+                          </div>
+                          {p.description && (
+                            <div className="text-xs text-slate-400 mt-1">{p.description}</div>
+                          )}
+                        </div>
+
+                        {/* Edit / Delete Buttons */}
+                        <div className="flex items-center gap-1">
+                          <button 
+                            onClick={() => setEditingProduct(p)} 
+                            className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 hover:text-purple-600 transition"
+                            title="সম্পাদনা করুন"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button 
+                            onClick={() => handleDeleteProduct(p.id)} 
+                            className="p-1.5 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950 text-slate-400 hover:text-rose-600 transition"
+                            title="মুছে ফেলুন"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Stock & Supplier Detail Tiles */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mt-3 pt-3 border-t border-slate-100 dark:border-slate-800/80">
+                        <div className="p-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
+                          <div className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1">
+                            <ShoppingBag className="w-3 h-3 text-rose-500" /> মোট কেনা হয়েছে
+                          </div>
+                          <div className="text-sm font-black text-slate-900 dark:text-white mt-0.5">
+                            {metrics.totalPurchasedQty.toFixed(1)} {p.unit}
+                          </div>
+                          <div className="text-[10px] text-rose-500 font-semibold">
+                            খরচ: {formatCurrency(metrics.totalCost)}
+                          </div>
+                        </div>
+
+                        <div className="p-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
+                          <div className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1">
+                            <ShoppingCart className="w-3 h-3 text-purple-500" /> মোট বিক্রি হয়েছে
+                          </div>
+                          <div className="text-sm font-black text-slate-900 dark:text-white mt-0.5">
+                            {metrics.totalSoldQty.toFixed(1)} {p.unit}
+                          </div>
+                          <div className="text-[10px] text-emerald-500 font-semibold">
+                            আয়: {formatCurrency(metrics.totalRevenue)}
+                          </div>
+                        </div>
+
+                        <div className="p-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
+                          <div className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1">
+                            <Truck className="w-3 h-3 text-blue-500" /> সরবরাহকারী / মহাজন
+                          </div>
+                          <div className="text-sm font-bold text-slate-800 dark:text-slate-200 mt-0.5 truncate" title={metrics.lastSupplier}>
+                            {metrics.lastSupplier}
+                          </div>
+                          <div className="text-[10px] text-slate-400 truncate">
+                            {metrics.lastPhone || 'ফোন নম্বর নেই'}
+                          </div>
+                        </div>
+
+                        <div className="p-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
+                          <div className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1">
+                            <Tag className="w-3 h-3 text-amber-500" /> নির্ধারিত দর
+                          </div>
+                          <div className="text-xs font-bold text-slate-800 dark:text-slate-200 mt-0.5">
+                            বিক্রয়: <span className="text-purple-600 dark:text-purple-400 font-black">{currency}{p.default_price || '0'}</span>
+                          </div>
+                          {metrics.lastPurchasePrice && (
+                            <div className="text-[10px] text-rose-500 font-semibold">
+                              কেনা দর: {currency}{metrics.lastPurchasePrice}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Action Quick Buttons */}
+                      <div className="flex items-center gap-2 pt-2">
+                        <button
+                          onClick={() => handleQuickBuy(p)}
+                          className="flex-1 py-2 px-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 text-xs font-black transition flex items-center justify-center gap-1.5 border border-rose-200 dark:border-rose-800"
+                        >
+                          <ShoppingBag className="w-3.5 h-3.5" /> + আরও ক্রয় করুন (Buy More)
+                        </button>
+                        <button
+                          onClick={() => handleQuickSell(p)}
+                          className="flex-1 py-2 px-3 rounded-xl bg-purple-50 dark:bg-purple-950/40 hover:bg-purple-100 dark:hover:bg-purple-900/60 text-purple-700 dark:text-purple-300 text-xs font-black transition flex items-center justify-center gap-1.5 border border-purple-200 dark:border-purple-800"
+                        >
+                          <ShoppingCart className="w-3.5 h-3.5" /> + বিক্রয় করুন (Sell)
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* 2. ADD PURCHASE TAB (পণ্য ক্রয় যোগ) */}
       {activeTab === 'add-purchase' && (
         <div className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
           <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
@@ -449,7 +815,7 @@ export const ProductsView: React.FC = () => {
               onClick={() => openAddProductModal('purchase')}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 text-xs font-bold hover:bg-purple-100 transition shadow-sm"
             >
-              <PlusCircle className="w-4 h-4 text-purple-600" /> + নতুন পণ্য যোগ
+              <PlusCircle className="w-4 h-4 text-purple-600" /> + নতুন পণ্য তৈরি
             </button>
           </div>
 
@@ -478,7 +844,7 @@ export const ProductsView: React.FC = () => {
                     onClick={() => openAddProductModal('purchase')}
                     className="text-[11px] text-purple-600 dark:text-purple-400 font-bold hover:underline"
                   >
-                    + নতুন আইটেম তৈরি
+                    + নতুন আইটেম
                   </button>
                 </div>
                 <select 
@@ -497,10 +863,25 @@ export const ProductsView: React.FC = () => {
               </div>
             </div>
 
+            {/* Current Stock Banner */}
+            {selectedPurchaseProduct && selectedPurchaseMetrics && (
+              <div className="p-3 rounded-2xl bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800/60 flex items-center justify-between text-xs">
+                <div className="flex items-center gap-2">
+                  <Layers className="w-4 h-4 text-purple-600" />
+                  <span className="font-medium text-slate-700 dark:text-slate-300">
+                    <strong>{selectedPurchaseProduct.name}</strong> এর বর্তমান মজুদ:
+                  </span>
+                </div>
+                <span className="font-black text-purple-700 dark:text-purple-300 px-2.5 py-0.5 rounded-lg bg-white dark:bg-slate-800 border border-purple-200">
+                  {selectedPurchaseMetrics.stock.toFixed(1)} {selectedPurchaseProduct.unit}
+                </span>
+              </div>
+            )}
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">
-                  পরিমাণ ({selectedPurchaseProduct?.unit || 'একক'}) *
+                  কতটুকু কিনলেন? পরিমাণ ({selectedPurchaseProduct?.unit || 'একক'}) *
                 </label>
                 <input 
                   type="number" 
@@ -548,8 +929,8 @@ export const ProductsView: React.FC = () => {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1 flex items-center gap-1">
-                  <Truck className="w-3.5 h-3.5" /> সরবরাহকারী / মহাজন (Supplier)
+                <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1 flex items-center gap-1">
+                  <Truck className="w-3.5 h-3.5 text-blue-500" /> কার কাছ থেকে কিনলেন? সরবরাহকারী (Supplier)
                 </label>
                 <input 
                   type="text" 
@@ -561,7 +942,7 @@ export const ProductsView: React.FC = () => {
                     if (matched && matched.phone) setPurchasePhone(matched.phone);
                   }} 
                   placeholder="সরবরাহকারীর নাম লিখুন বা বেছে নিন"
-                  className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white outline-none focus:border-rose-500" 
+                  className="w-full px-3 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white outline-none focus:border-rose-500" 
                 />
                 <datalist id="suppliers-datalist">
                   {suppliersList.map(s => (
@@ -572,14 +953,14 @@ export const ProductsView: React.FC = () => {
 
               <div>
                 <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1 flex items-center gap-1">
-                  <Phone className="w-3.5 h-3.5" /> ফোন নম্বর (ঐচ্ছিক)
+                  <Phone className="w-3.5 h-3.5 text-slate-400" /> সরবরাহকারীর ফোন নম্বর (ঐচ্ছিক)
                 </label>
                 <input 
                   type="text" 
                   value={purchasePhone} 
                   onChange={e => setPurchasePhone(e.target.value)} 
                   placeholder="017xxxxxxxx"
-                  className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white outline-none focus:border-rose-500" 
+                  className="w-full px-3 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white outline-none focus:border-rose-500" 
                 />
               </div>
             </div>
@@ -587,11 +968,11 @@ export const ProductsView: React.FC = () => {
             {/* Payment Status Option */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">পেমেন্ট অবস্থা</label>
+                <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">পেমেন্ট অবস্থা</label>
                 <select 
                   value={purchasePayment} 
                   onChange={e => handlePurchasePaymentChange(e.target.value as any)}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white outline-none focus:border-rose-500 font-semibold"
+                  className="w-full px-3 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white outline-none focus:border-rose-500 font-semibold"
                 >
                   <option value="Paid">পরিশোধ (Paid ✅)</option>
                   <option value="Due">বাকি (Due ❌)</option>
@@ -601,14 +982,14 @@ export const ProductsView: React.FC = () => {
 
               <div>
                 <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1 flex items-center gap-1">
-                  <FileText className="w-3.5 h-3.5" /> নোট বা মন্তব্য
+                  <FileText className="w-3.5 h-3.5 text-slate-400" /> নোট বা মন্তব্য
                 </label>
                 <input 
                   type="text" 
                   value={purchaseNotes} 
                   onChange={e => setPurchaseNotes(e.target.value)} 
                   placeholder="যেমন: প্যাকিং খরচ, বিশেষ কোয়ালিটি..."
-                  className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white outline-none focus:border-rose-500" 
+                  className="w-full px-3 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white outline-none focus:border-rose-500" 
                 />
               </div>
             </div>
@@ -689,7 +1070,7 @@ export const ProductsView: React.FC = () => {
         </div>
       )}
 
-      {/* 2. ADD SALE TAB (পণ্য বিক্রয় যোগ) */}
+      {/* 3. ADD SALE TAB (পণ্য বিক্রয় যোগ) */}
       {activeTab === 'add-sale' && (
         <div className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
           <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
@@ -701,7 +1082,7 @@ export const ProductsView: React.FC = () => {
               onClick={() => openAddProductModal('sale')}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 text-xs font-bold hover:bg-purple-100 transition shadow-sm"
             >
-              <PlusCircle className="w-4 h-4 text-purple-600" /> + নতুন পণ্য যোগ
+              <PlusCircle className="w-4 h-4 text-purple-600" /> + নতুন পণ্য তৈরি
             </button>
           </div>
 
@@ -730,7 +1111,7 @@ export const ProductsView: React.FC = () => {
                     onClick={() => openAddProductModal('sale')}
                     className="text-[11px] text-purple-600 dark:text-purple-400 font-bold hover:underline"
                   >
-                    + নতুন আইটেম তৈরি
+                    + নতুন আইটেম
                   </button>
                 </div>
                 <select 
@@ -748,6 +1129,25 @@ export const ProductsView: React.FC = () => {
                 </select>
               </div>
             </div>
+
+            {/* Current Stock Banner */}
+            {selectedSaleProduct && selectedSaleMetrics && (
+              <div className="p-3 rounded-2xl bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800/60 flex items-center justify-between text-xs">
+                <div className="flex items-center gap-2">
+                  <Layers className="w-4 h-4 text-purple-600" />
+                  <span className="font-medium text-slate-700 dark:text-slate-300">
+                    <strong>{selectedSaleProduct.name}</strong> এর বর্তমান মজুদ স্টক:
+                  </span>
+                </div>
+                <span className={`font-black px-2.5 py-0.5 rounded-lg border ${
+                  selectedSaleMetrics.stock <= 0 
+                    ? 'bg-rose-100 text-rose-700 border-rose-300' 
+                    : 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                }`}>
+                  {selectedSaleMetrics.stock.toFixed(1)} {selectedSaleProduct.unit}
+                </span>
+              </div>
+            )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
@@ -808,20 +1208,20 @@ export const ProductsView: React.FC = () => {
                   value={saleCustomer} 
                   onChange={e => setSaleCustomer(e.target.value)} 
                   placeholder="যেমন: Cash Customer বা ক্রেতার নাম"
-                  className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white outline-none focus:border-purple-500" 
+                  className="w-full px-3 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white outline-none focus:border-purple-500" 
                 />
               </div>
 
               <div>
                 <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1 flex items-center gap-1">
-                  <Phone className="w-3.5 h-3.5" /> ফোন নম্বর
+                  <Phone className="w-3.5 h-3.5" /> ক্রেতার ফোন নম্বর
                 </label>
                 <input 
                   type="text" 
                   value={salePhone} 
                   onChange={e => setSalePhone(e.target.value)} 
                   placeholder="017xxxxxxxx"
-                  className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white outline-none focus:border-purple-500" 
+                  className="w-full px-3 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white outline-none focus:border-purple-500" 
                 />
               </div>
             </div>
@@ -833,7 +1233,7 @@ export const ProductsView: React.FC = () => {
                 <select 
                   value={salePayment} 
                   onChange={e => handleSalePaymentChange(e.target.value as any)}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white outline-none focus:border-purple-500 font-semibold"
+                  className="w-full px-3 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white outline-none focus:border-purple-500 font-semibold"
                 >
                   <option value="Paid">পরিশোধ (Paid ✅)</option>
                   <option value="Due">বাকি (Due ❌)</option>
@@ -850,7 +1250,7 @@ export const ProductsView: React.FC = () => {
                   value={saleNotes} 
                   onChange={e => setSaleNotes(e.target.value)} 
                   placeholder="যেকোনো মন্তব্য..."
-                  className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white outline-none focus:border-purple-500" 
+                  className="w-full px-3 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white outline-none focus:border-purple-500" 
                 />
               </div>
             </div>
@@ -911,7 +1311,7 @@ export const ProductsView: React.FC = () => {
                     <span className="text-base font-black text-emerald-800 dark:text-emerald-300">{formatCurrency(currentSalePaid)}</span>
                   </div>
                   <div className="p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 text-center">
-                    <span className="text-[10px] uppercase font-bold text-rose-700 dark:text-rose-400 block">বকেয়া / Due</span>
+                    <span className="text-[10px] uppercase font-bold text-rose-700 dark:text-rose-400 block">বাকি / Due</span>
                     <span className="text-base font-black text-rose-800 dark:text-rose-300">{formatCurrency(currentSaleDue)}</span>
                   </div>
                 </div>
@@ -931,7 +1331,7 @@ export const ProductsView: React.FC = () => {
         </div>
       )}
 
-      {/* 3. PURCHASE HISTORY TAB (ক্রয় ইতিহাস) */}
+      {/* 4. PURCHASE HISTORY TAB (ক্রয় ইতিহাস) */}
       {activeTab === 'purchase-history' && (
         <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
           <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
@@ -957,11 +1357,11 @@ export const ProductsView: React.FC = () => {
                 const dueAmt = pur.due_amount !== undefined ? pur.due_amount : (pur.payment_status === 'Due' ? pur.total_amount : Math.max(0, pur.total_amount - paidAmt));
 
                 return (
-                  <div key={pur.id} className="flex items-center justify-between px-5 py-3.5 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition">
-                    <div className="flex-1 min-w-0">
+                  <div key={pur.id} className="flex items-center justify-between px-5 py-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition">
+                    <div className="flex-1 min-w-0 space-y-1">
                       <div className="flex items-center gap-2">
-                        <span className="font-bold text-sm text-slate-900 dark:text-white">{pur.product_name}</span>
-                        <span className={`text-[11px] px-2 py-0.5 rounded-full font-semibold ${
+                        <span className="font-black text-base text-slate-900 dark:text-white">{pur.product_name}</span>
+                        <span className={`text-[11px] px-2 py-0.5 rounded-full font-bold ${
                           pur.payment_status === 'Paid' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400' :
                           pur.payment_status === 'Due' ? 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-400' :
                           'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400'
@@ -969,23 +1369,31 @@ export const ProductsView: React.FC = () => {
                           {pur.payment_status === 'Partial' ? 'আংশিক (Partial)' : pur.payment_status}
                         </span>
                       </div>
-                      <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                        {pur.date} · {pur.quantity} {pur.unit} · দর: {currency}{pur.purchase_price} · সরবরাহকারী: {pur.supplier_name || 'General'}
+
+                      <div className="flex items-center gap-3 text-xs text-slate-600 dark:text-slate-300 flex-wrap">
+                        <span>📅 {pur.date}</span>
+                        <span>📦 পরিমাণ: <strong className="text-slate-900 dark:text-white">{pur.quantity} {pur.unit}</strong></span>
+                        <span>💵 দর: <strong>{currency}{pur.purchase_price}</strong></span>
+                        <span className="text-blue-600 dark:text-blue-400 font-bold flex items-center gap-1">
+                          <Truck className="w-3 h-3" /> মহাজন/সরবরাহকারী: {pur.supplier_name || 'General Supplier'} {pur.supplier_phone ? `(${pur.supplier_phone})` : ''}
+                        </span>
                       </div>
+
                       {isPartial && (
-                        <div className="flex items-center gap-2 mt-1 text-[11px] font-bold">
+                        <div className="flex items-center gap-2 text-[11px] font-bold">
                           <span className="text-emerald-600 dark:text-emerald-400">জমা: {formatCurrency(paidAmt)}</span>
                           <span className="text-slate-300">|</span>
                           <span className="text-rose-600 dark:text-rose-400">বাকি: {formatCurrency(dueAmt)}</span>
                         </div>
                       )}
                       {pur.notes && (
-                        <div className="text-[11px] text-slate-400 italic mt-0.5">নোট: {pur.notes}</div>
+                        <div className="text-[11px] text-slate-400 italic">নোট: {pur.notes}</div>
                       )}
                     </div>
-                    <div className="flex items-center gap-3">
+
+                    <div className="flex items-center gap-3 ml-2">
                       <div className="text-right">
-                        <span className="font-black text-rose-600 dark:text-rose-400 text-sm tabular-nums block">
+                        <span className="font-black text-rose-600 dark:text-rose-400 text-base tabular-nums block">
                           -{formatCurrency(pur.total_amount)}
                         </span>
                       </div>
@@ -1005,7 +1413,7 @@ export const ProductsView: React.FC = () => {
         </div>
       )}
 
-      {/* 4. SALES HISTORY TAB (বিক্রয় ইতিহাস) */}
+      {/* 5. SALES HISTORY TAB (বিক্রয় ইতিহাস) */}
       {activeTab === 'sales-history' && (
         <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
           <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
@@ -1029,11 +1437,11 @@ export const ProductsView: React.FC = () => {
                 const dueAmt = s.due_amount !== undefined ? s.due_amount : (s.payment_status === 'Due' ? s.total_amount : Math.max(0, s.total_amount - paidAmt));
 
                 return (
-                  <div key={s.id} className="flex items-center justify-between px-5 py-3.5 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition">
-                    <div className="flex-1 min-w-0">
+                  <div key={s.id} className="flex items-center justify-between px-5 py-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition">
+                    <div className="flex-1 min-w-0 space-y-1">
                       <div className="flex items-center gap-2">
-                        <span className="font-bold text-sm text-slate-900 dark:text-white">{s.product_name}</span>
-                        <span className={`text-[11px] px-2 py-0.5 rounded-full font-semibold ${
+                        <span className="font-black text-base text-slate-900 dark:text-white">{s.product_name}</span>
+                        <span className={`text-[11px] px-2 py-0.5 rounded-full font-bold ${
                           s.payment_status === 'Paid' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400' :
                           s.payment_status === 'Due' ? 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-400' :
                           'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400'
@@ -1041,23 +1449,31 @@ export const ProductsView: React.FC = () => {
                           {s.payment_status === 'Partial' ? 'আংশিক (Partial)' : s.payment_status}
                         </span>
                       </div>
-                      <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                        {s.date} · {s.quantity} {s.unit} · দর: {currency}{s.selling_price} · ক্রেতা: {s.customer_name}
+
+                      <div className="flex items-center gap-3 text-xs text-slate-600 dark:text-slate-300 flex-wrap">
+                        <span>📅 {s.date}</span>
+                        <span>📦 পরিমাণ: <strong className="text-slate-900 dark:text-white">{s.quantity} {s.unit}</strong></span>
+                        <span>💵 দর: <strong>{currency}{s.selling_price}</strong></span>
+                        <span className="text-purple-600 dark:text-purple-400 font-bold flex items-center gap-1">
+                          <User className="w-3 h-3" /> ক্রেতা: {s.customer_name || 'Cash Customer'} {s.customer_phone ? `(${s.customer_phone})` : ''}
+                        </span>
                       </div>
+
                       {isPartial && (
-                        <div className="flex items-center gap-2 mt-1 text-[11px] font-bold">
+                        <div className="flex items-center gap-2 text-[11px] font-bold">
                           <span className="text-emerald-600 dark:text-emerald-400">জমা: {formatCurrency(paidAmt)}</span>
                           <span className="text-slate-300">|</span>
                           <span className="text-rose-600 dark:text-rose-400">বাকি: {formatCurrency(dueAmt)}</span>
                         </div>
                       )}
                       {s.notes && (
-                        <div className="text-[11px] text-slate-400 italic mt-0.5">নোট: {s.notes}</div>
+                        <div className="text-[11px] text-slate-400 italic">নোট: {s.notes}</div>
                       )}
                     </div>
-                    <div className="flex items-center gap-3">
+
+                    <div className="flex items-center gap-3 ml-2">
                       <div className="text-right">
-                        <span className="font-black text-purple-700 dark:text-purple-400 text-sm tabular-nums block">
+                        <span className="font-black text-purple-700 dark:text-purple-400 text-base tabular-nums block">
                           +{formatCurrency(s.total_amount)}
                         </span>
                       </div>
@@ -1077,258 +1493,243 @@ export const ProductsView: React.FC = () => {
         </div>
       )}
 
-      {/* 5. CATALOG TAB (পণ্য তালিকা) */}
-      {activeTab === 'catalog' && (
-        <div className="space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800">
-            <div className="flex-1 relative">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input 
-                type="text" 
-                value={catalogSearch}
-                onChange={e => setCatalogSearch(e.target.value)}
-                placeholder="পণ্য খুঁজুন (নাম বা বিবরণ)..."
-                className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm text-slate-900 dark:text-white outline-none focus:border-purple-500"
-              />
-            </div>
-            <button 
-              onClick={() => openAddProductModal('catalog')}
-              className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold transition shadow-lg shadow-purple-600/30 shrink-0"
-            >
-              <Plus className="w-4 h-4" /> + নতুন পণ্য যোগ করুন
-            </button>
-          </div>
-
-          {/* Product Cards */}
-          <div className="space-y-3">
-            {loading ? (
-              <div className="p-8 text-center text-slate-400 text-sm">লোড হচ্ছে...</div>
-            ) : filteredProducts.length === 0 ? (
-              <div className="p-8 text-center bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 text-slate-400 text-sm space-y-2">
-                <Package className="w-10 h-10 mx-auto text-slate-300" />
-                <p>কোনো পণ্য পাওয়া যায়নি। নতুন কোনো পণ্য যোগ করতে উপরের বাটনে চাপুন।</p>
-              </div>
-            ) : filteredProducts.map(p => (
-              <div key={p.id} className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm transition hover:border-purple-300 dark:hover:border-purple-800">
-                {editingProduct?.id === p.id ? (
-                  <form onSubmit={handleUpdateProduct} className="space-y-3">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-[11px] font-bold text-slate-500 mb-1">পণ্যের নাম *</label>
-                        <input 
-                          type="text" 
-                          value={editingProduct.name} 
-                          onChange={e => setEditingProduct(ep => ep ? { ...ep, name: e.target.value } : ep)} 
-                          required
-                          className="w-full px-3 py-2 rounded-xl border border-purple-300 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white outline-none" 
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[11px] font-bold text-slate-500 mb-1">একক (Unit)</label>
-                        <select 
-                          value={editingProduct.unit} 
-                          onChange={e => setEditingProduct(ep => ep ? { ...ep, unit: e.target.value } : ep)}
-                          className="w-full px-3 py-2 rounded-xl border border-purple-300 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white outline-none"
-                        >
-                          <option value="KG">KG (কেজি)</option>
-                          <option value="Liter">Liter (লিটার)</option>
-                          <option value="Piece">Piece (পিস / পাত্র)</option>
-                          <option value="Pack">Pack (প্যাকেট)</option>
-                          <option value="Box">Box (বাক্স)</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-[11px] font-bold text-slate-500 mb-1">ডিফল্ট বিক্রয় দর ({currency})</label>
-                        <input 
-                          type="number" 
-                          value={editingProduct.default_price} 
-                          onChange={e => setEditingProduct(ep => ep ? { ...ep, default_price: parseFloat(e.target.value) || 0 } : ep)}
-                          className="w-full px-3 py-2 rounded-xl border border-purple-300 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white outline-none" 
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[11px] font-bold text-slate-500 mb-1">বিবরণ</label>
-                        <input 
-                          type="text" 
-                          value={editingProduct.description || ''} 
-                          onChange={e => setEditingProduct(ep => ep ? { ...ep, description: e.target.value } : ep)}
-                          placeholder="বিবরণ" 
-                          className="w-full px-3 py-2 rounded-xl border border-purple-300 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white outline-none" 
-                        />
-                      </div>
-                    </div>
-                    <div className="flex gap-2 justify-end">
-                      <button type="submit" className="px-3.5 py-1.5 rounded-xl bg-purple-600 text-white text-xs font-bold flex items-center gap-1">
-                        <Save className="w-3.5 h-3.5" /> সেভ
-                      </button>
-                      <button type="button" onClick={() => setEditingProduct(null)} className="px-3.5 py-1.5 rounded-xl bg-slate-200 dark:bg-slate-700 text-xs font-bold flex items-center gap-1">
-                        <X className="w-3.5 h-3.5" /> বাতিল
-                      </button>
-                    </div>
-                  </form>
-                ) : (
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-base text-slate-900 dark:text-white">{p.name}</span>
-                        <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-[11px] font-semibold text-slate-600 dark:text-slate-300">
-                          {p.unit}
-                        </span>
-                      </div>
-                      <div className="text-xs text-slate-500 mt-1">
-                        ডিফল্ট বিক্রয় দর: <strong className="text-purple-600 dark:text-purple-400">{currency}{p.default_price || '0'}</strong> / {p.unit}
-                      </div>
-                      {p.description && <div className="text-xs text-slate-400 mt-0.5">{p.description}</div>}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button 
-                        onClick={() => setEditingProduct(p)} 
-                        className="p-2 rounded-xl hover:bg-purple-50 dark:hover:bg-purple-950 text-purple-600 dark:text-purple-400 transition"
-                        title="সম্পাদনা করুন"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </button>
-                      <button 
-                        onClick={() => handleDeleteProduct(p.id)} 
-                        className="p-2 rounded-xl hover:bg-rose-50 dark:hover:bg-rose-950 text-rose-400 hover:text-rose-600 transition"
-                        title="মুছে ফেলুন"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* GLOBAL ADD NEW PRODUCT MODAL */}
+      {/* GLOBAL ADD NEW PRODUCT MODAL WITH INITIAL STOCK & SUPPLIER */}
       {showAddProductModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden animate-fadeIn">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden animate-fadeIn my-auto max-h-[90vh] flex flex-col">
             {/* Modal Header */}
-            <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-gradient-to-r from-purple-50 to-indigo-50 dark:from-purple-950/40 dark:to-indigo-950/20">
+            <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-gradient-to-r from-purple-600 to-indigo-700 text-white shrink-0">
               <div className="flex items-center gap-2.5">
-                <div className="p-2 rounded-xl bg-purple-600 text-white">
-                  <Sparkles className="w-4 h-4" />
+                <div className="p-2 rounded-xl bg-white/20 backdrop-blur border border-white/20">
+                  <Sparkles className="w-5 h-5 text-white" />
                 </div>
                 <div>
-                  <h3 className="font-black text-slate-900 dark:text-white text-base">নতুন পণ্য যোগ করুন</h3>
-                  <p className="text-[11px] text-slate-500">তালিকায় নতুন প্রোডাক্ট অন্তর্ভুক্ত করুন</p>
+                  <h3 className="font-black text-white text-base">নতুন পণ্য ও স্টক যোগ করুন</h3>
+                  <p className="text-[11px] text-purple-200">পণ্যের বিবরণ, কতটুকু কিনলেন ও সরবরাহকারীর তথ্য দিন</p>
                 </div>
               </div>
               <button 
                 onClick={() => setShowAddProductModal(false)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+                className="p-1.5 rounded-lg text-white/80 hover:text-white hover:bg-white/10 transition"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            {/* Presets Chips */}
-            <div className="p-5 pb-0">
-              <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-2">দ্রুত নমুনা নির্বাচন করুন:</p>
-              <div className="flex flex-wrap gap-1.5">
-                {COMMON_PRESETS.map((preset, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => {
-                      setNewProduct({
-                        name: preset.name,
-                        unit: preset.unit,
-                        default_price: preset.price,
-                        description: ''
-                      });
-                    }}
-                    className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-[11px] font-semibold text-slate-700 dark:text-slate-300 hover:bg-purple-100 dark:hover:bg-purple-900/50 hover:text-purple-700 transition"
-                  >
-                    + {preset.name}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Modal Form */}
-            <form onSubmit={handleSaveNewProduct} className="p-5 space-y-4">
+            <div className="overflow-y-auto flex-1 p-5 space-y-5">
+              {/* Presets Chips */}
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  পণ্যের নাম *
-                </label>
-                <input 
-                  type="text" 
-                  value={newProduct.name} 
-                  onChange={e => setNewProduct(p => ({ ...p, name: e.target.value }))} 
-                  placeholder="যেমন: ঘি, মাখন, পনির, মিষ্টি ইত্যাদি" 
-                  required
-                  className="w-full px-3 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-medium text-slate-900 dark:text-white outline-none focus:border-purple-500" 
-                />
+                <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-2 flex items-center gap-1">
+                  ⚡ দ্রুত নমুনা নির্বাচন করুন:
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {COMMON_PRESETS.map((preset, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => {
+                        setNewProduct(p => ({
+                          ...p,
+                          name: preset.name,
+                          unit: preset.unit,
+                          default_price: preset.price,
+                          purchase_price: preset.purchasePrice || '',
+                        }));
+                      }}
+                      className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-[11px] font-semibold text-slate-700 dark:text-slate-300 hover:bg-purple-100 dark:hover:bg-purple-900/50 hover:text-purple-700 transition border border-slate-200/60 dark:border-slate-700"
+                    >
+                      + {preset.name}
+                    </button>
+                  ))}
+                </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    একক (Unit) *
-                  </label>
-                  <select 
-                    value={newProduct.unit} 
-                    onChange={e => setNewProduct(p => ({ ...p, unit: e.target.value }))}
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-medium text-slate-900 dark:text-white outline-none focus:border-purple-500"
-                  >
-                    <option value="KG">KG (কেজি)</option>
-                    <option value="Liter">Liter (লিটার)</option>
-                    <option value="Piece">Piece (পিস / পাত্র)</option>
-                    <option value="Pack">Pack (প্যাকেট)</option>
-                    <option value="Box">Box (বাক্স)</option>
-                  </select>
+              {/* Form */}
+              <form id="add-product-form" onSubmit={handleSaveNewProduct} className="space-y-4">
+                {/* SECTION 1: BASIC INFO */}
+                <div className="space-y-3 p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700">
+                  <span className="text-xs font-black text-purple-700 dark:text-purple-400 uppercase tracking-wider block">
+                    ১. পণ্যের মৌলিক বিবরণ
+                  </span>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      পণ্যের নাম *
+                    </label>
+                    <input 
+                      type="text" 
+                      value={newProduct.name} 
+                      onChange={e => setNewProduct(p => ({ ...p, name: e.target.value }))} 
+                      placeholder="যেমন: ঘি, মাখন, পনির, মিষ্টি ইত্যাদি" 
+                      required
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white outline-none focus:border-purple-500" 
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                        একক (Unit) *
+                      </label>
+                      <select 
+                        value={newProduct.unit} 
+                        onChange={e => setNewProduct(p => ({ ...p, unit: e.target.value }))}
+                        className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-medium text-slate-900 dark:text-white outline-none focus:border-purple-500"
+                      >
+                        <option value="KG">KG (কেজি)</option>
+                        <option value="Liter">Liter (লিটার)</option>
+                        <option value="Piece">Piece (পিস / পাত্র)</option>
+                        <option value="Pack">Pack (প্যাকেট)</option>
+                        <option value="Box">Box (বাক্স)</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                        বিক্রয় দর ({currency})
+                      </label>
+                      <input 
+                        type="number" 
+                        value={newProduct.default_price} 
+                        onChange={e => setNewProduct(p => ({ ...p, default_price: e.target.value }))} 
+                        placeholder="যেমন: 1400"
+                        className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white outline-none focus:border-purple-500" 
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* SECTION 2: INITIAL PURCHASE / STOCK ENTRY */}
+                <div className="space-y-3 p-3.5 rounded-2xl bg-rose-50/70 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/60">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-black text-rose-700 dark:text-rose-400 uppercase tracking-wider block">
+                      ২. কতটুকু কিনলেন? (প্রারম্ভিক স্টক ও মহাজন)
+                    </span>
+                    <span className="text-[10px] text-rose-600 bg-white dark:bg-slate-800 px-2 py-0.5 rounded-full border border-rose-200 font-bold">
+                      ক্রয় রেকর্ড তৈরি হবে
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                        কেনা পরিমাণ ({newProduct.unit})
+                      </label>
+                      <input 
+                        type="number" 
+                        step="any" 
+                        min="0"
+                        value={newProduct.initial_qty} 
+                        onChange={e => setNewProduct(p => ({ ...p, initial_qty: e.target.value }))} 
+                        placeholder="যেমন: 10 বা 20"
+                        className="w-full px-3 py-2 rounded-xl border border-rose-300 dark:border-rose-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white outline-none focus:border-rose-500" 
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                        কেনা দর প্রতি {newProduct.unit} ({currency})
+                      </label>
+                      <input 
+                        type="number" 
+                        step="any"
+                        min="0"
+                        value={newProduct.purchase_price} 
+                        onChange={e => setNewProduct(p => ({ ...p, purchase_price: e.target.value }))} 
+                        placeholder="যেমন: 1200"
+                        className="w-full px-3 py-2 rounded-xl border border-rose-300 dark:border-rose-800 bg-white dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white outline-none focus:border-rose-500" 
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1">
+                        <Truck className="w-3.5 h-3.5 text-blue-500" /> কার কাছ থেকে কিনলেন? (Supplier)
+                      </label>
+                      <input 
+                        type="text" 
+                        list="modal-suppliers-list"
+                        value={newProduct.supplier_name} 
+                        onChange={e => {
+                          const val = e.target.value;
+                          setNewProduct(p => ({ ...p, supplier_name: val }));
+                          const matched = suppliersList.find(s => s.name.toLowerCase() === val.toLowerCase());
+                          if (matched && matched.phone) setNewProduct(p => ({ ...p, supplier_phone: matched.phone || '' }));
+                        }} 
+                        placeholder="সরবরাহকারী বা মহাজনের নাম"
+                        className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white outline-none focus:border-rose-500" 
+                      />
+                      <datalist id="modal-suppliers-list">
+                        {suppliersList.map(s => (
+                          <option key={s.id} value={s.name}>{s.phone ? `(${s.phone})` : ''}</option>
+                        ))}
+                      </datalist>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1">
+                        <Phone className="w-3.5 h-3.5 text-slate-400" /> ফোন নম্বর (ঐচ্ছিক)
+                      </label>
+                      <input 
+                        type="text" 
+                        value={newProduct.supplier_phone} 
+                        onChange={e => setNewProduct(p => ({ ...p, supplier_phone: e.target.value }))} 
+                        placeholder="017xxxxxxxx"
+                        className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white outline-none focus:border-rose-500" 
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                      পেমেন্ট অবস্থা
+                    </label>
+                    <select 
+                      value={newProduct.payment_status} 
+                      onChange={e => setNewProduct(p => ({ ...p, payment_status: e.target.value as any }))}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-semibold text-slate-900 dark:text-white outline-none focus:border-rose-500"
+                    >
+                      <option value="Paid">পরিশোধ (Paid ✅)</option>
+                      <option value="Due">বাকি (Due ❌)</option>
+                      <option value="Partial">আংশিক পরিশোধ (Partial ⏱️)</option>
+                    </select>
+                  </div>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    ডিফল্ট বিক্রয় দর ({currency})
+                  <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                    বিবরণ / নোট (ঐচ্ছিক)
                   </label>
                   <input 
-                    type="number" 
-                    value={newProduct.default_price} 
-                    onChange={e => setNewProduct(p => ({ ...p, default_price: e.target.value }))} 
-                    placeholder="যেমন: 1400"
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-medium text-slate-900 dark:text-white outline-none focus:border-purple-500" 
+                    type="text" 
+                    value={newProduct.description} 
+                    onChange={e => setNewProduct(p => ({ ...p, description: e.target.value }))} 
+                    placeholder="যেমন: স্পেশাল গাওয়া ঘি, প্রিমিয়াম কোয়ালিটি"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white outline-none focus:border-purple-500" 
                   />
                 </div>
-              </div>
+              </form>
+            </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  বিবরণ / নোট (ঐচ্ছিক)
-                </label>
-                <input 
-                  type="text" 
-                  value={newProduct.description} 
-                  onChange={e => setNewProduct(p => ({ ...p, description: e.target.value }))} 
-                  placeholder="যেমন: স্পেশাল গাওয়া ঘি, প্রিমিয়াম কোয়ালিটি"
-                  className="w-full px-3 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white outline-none focus:border-purple-500" 
-                />
-              </div>
-
-              <div className="flex gap-2.5 pt-2">
-                <button 
-                  type="button" 
-                  onClick={() => setShowAddProductModal(false)}
-                  className="flex-1 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold transition"
-                >
-                  বাতিল
-                </button>
-                <button 
-                  type="submit" 
-                  disabled={savingProduct}
-                  className="flex-1 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold transition shadow-lg shadow-purple-600/30 disabled:opacity-50 flex items-center justify-center gap-1.5"
-                >
-                  {savingProduct ? 'সংরক্ষণ হচ্ছে...' : <><Save className="w-4 h-4" /> পণ্য সেভ করুন</>}
-                </button>
-              </div>
-            </form>
+            {/* Modal Bottom Actions */}
+            <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 flex gap-2.5 shrink-0">
+              <button 
+                type="button" 
+                onClick={() => setShowAddProductModal(false)}
+                className="flex-1 py-2.5 rounded-xl bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 text-xs font-bold transition"
+              >
+                বাতিল
+              </button>
+              <button 
+                type="submit" 
+                form="add-product-form"
+                disabled={savingProduct}
+                className="flex-1 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold transition shadow-lg shadow-purple-600/30 disabled:opacity-50 flex items-center justify-center gap-1.5"
+              >
+                {savingProduct ? 'সংরক্ষণ হচ্ছে...' : <><Save className="w-4 h-4" /> পণ্য ও স্টক সেভ করুন</>}
+              </button>
+            </div>
           </div>
         </div>
       )}
