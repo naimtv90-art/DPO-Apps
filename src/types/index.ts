@@ -348,6 +348,8 @@ export interface ProductSale {
   unit: string;
   selling_price: number;
   total_amount: number;
+  paid_amount?: number;
+  due_amount?: number;
   customer_name: string;
   customer_phone?: string;
   payment_status: 'Paid' | 'Due' | 'Partial';
@@ -364,6 +366,8 @@ export interface ProductPurchase {
   unit: string;
   purchase_price: number;
   total_amount: number;
+  paid_amount?: number;
+  due_amount?: number;
   supplier_name: string;
   supplier_phone?: string;
   payment_status: 'Paid' | 'Due' | 'Partial';

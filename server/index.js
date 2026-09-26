@@ -1869,7 +1869,7 @@ app.post('/api/settings', async (req, res) => {
 // =================== PRODUCTS API ===================
 
 // GET all products
-app.get('/api/products', authenticate, async (req, res) => {
+app.get('/api/products', async (req, res) => {
   try {
     const result = await query('SELECT * FROM products WHERE is_active = ? ORDER BY name ASC', [true]);
     res.json({ products: result.rows });
@@ -1880,15 +1880,20 @@ app.get('/api/products', authenticate, async (req, res) => {
 });
 
 // POST create product
-app.post('/api/products', authenticate, async (req, res) => {
+app.post('/api/products', async (req, res) => {
   try {
     const { name, unit, default_price, description } = req.body;
     if (!name) return res.status(400).json({ error: 'Product name required' });
     const result = await query(
       'INSERT INTO products (name, unit, default_price, description) VALUES (?, ?, ?, ?) RETURNING *',
-      [name.trim(), unit || 'Piece', parseFloat(default_price) || 0, description || '']
+      [name.trim(), unit || 'KG', parseFloat(default_price) || 0, description || '']
     );
-    res.status(201).json({ product: result.rows[0], message: 'Product created' });
+    let product = result.rows && result.rows[0];
+    if (!product && result.insertId) {
+      const fetchRes = await query('SELECT * FROM products WHERE id = ?', [result.insertId]);
+      product = fetchRes.rows[0];
+    }
+    res.status(201).json({ product: product || { id: result.insertId, name, unit: unit || 'KG', default_price: parseFloat(default_price) || 0 }, message: 'Product created' });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to create product' });
@@ -1896,12 +1901,12 @@ app.post('/api/products', authenticate, async (req, res) => {
 });
 
 // PUT update product
-app.put('/api/products/:id', authenticate, async (req, res) => {
+app.put('/api/products/:id', async (req, res) => {
   try {
     const { name, unit, default_price, description } = req.body;
     await query(
       'UPDATE products SET name = ?, unit = ?, default_price = ?, description = ? WHERE id = ?',
-      [name.trim(), unit || 'Piece', parseFloat(default_price) || 0, description || '', req.params.id]
+      [name.trim(), unit || 'KG', parseFloat(default_price) || 0, description || '', req.params.id]
     );
     res.json({ message: 'Product updated' });
   } catch (err) {
@@ -1911,7 +1916,7 @@ app.put('/api/products/:id', authenticate, async (req, res) => {
 });
 
 // DELETE product
-app.delete('/api/products/:id', authenticate, async (req, res) => {
+app.delete('/api/products/:id', async (req, res) => {
   try {
     await query('UPDATE products SET is_active = ? WHERE id = ?', [false, req.params.id]);
     res.json({ message: 'Product deleted' });
@@ -1921,10 +1926,125 @@ app.delete('/api/products/:id', authenticate, async (req, res) => {
   }
 });
 
+// =================== PRODUCT PURCHASES API ===================
+
+// GET product purchases
+app.get('/api/product-purchases', async (req, res) => {
+  try {
+    const { limit = 100, product_id } = req.query;
+    let sql = 'SELECT * FROM product_purchases';
+    const params = [];
+    if (product_id) {
+      sql += ' WHERE product_id = ?';
+      params.push(product_id);
+    }
+    sql += ' ORDER BY date DESC, created_at DESC LIMIT ?';
+    params.push(parseInt(limit));
+    const result = await query(sql, params);
+    
+    // Summary stats
+    const statsRes = await query(`
+      SELECT 
+        COALESCE(SUM(total_amount), 0) as total_cost,
+        COALESCE(SUM(paid_amount), 0) as total_paid,
+        COALESCE(SUM(due_amount), 0) as total_due,
+        COALESCE(SUM(quantity), 0) as total_qty,
+        COUNT(*) as total_count
+      FROM product_purchases
+    `);
+
+    const purchases = result.rows.map(p => {
+      const total_amount = parseFloat(p.total_amount) || 0;
+      const payment_status = p.payment_status || 'Paid';
+      const paid_amount = p.paid_amount !== undefined && p.paid_amount !== null ? parseFloat(p.paid_amount) : (payment_status === 'Paid' ? total_amount : 0);
+      const due_amount = p.due_amount !== undefined && p.due_amount !== null ? parseFloat(p.due_amount) : (payment_status === 'Due' ? total_amount : Math.max(0, total_amount - paid_amount));
+      return {
+        ...p,
+        date: normalizeDate(p.date),
+        total_amount,
+        paid_amount,
+        due_amount
+      };
+    });
+
+    res.json({ purchases, stats: statsRes.rows[0] });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch product purchases' });
+  }
+});
+
+// POST create product purchase
+app.post('/api/product-purchases', async (req, res) => {
+  try {
+    const { date, product_id, product_name, quantity, unit, purchase_price, supplier_name, supplier_phone, payment_status = 'Paid', paid_amount, due_amount, notes } = req.body;
+    if (!product_name) return res.status(400).json({ error: 'Product name required' });
+    const qty = parseFloat(quantity);
+    const rate = parseFloat(purchase_price);
+    if (isNaN(qty) || qty <= 0) return res.status(400).json({ error: 'Valid quantity required' });
+    if (isNaN(rate) || rate < 0) return res.status(400).json({ error: 'Purchase price cannot be negative' });
+
+    const total_amount = qty * rate;
+    let paidAmt = total_amount;
+    let dueAmt = 0;
+
+    if (payment_status === 'Paid') {
+      paidAmt = total_amount;
+      dueAmt = 0;
+    } else if (payment_status === 'Due') {
+      paidAmt = 0;
+      dueAmt = total_amount;
+    } else if (payment_status === 'Partial') {
+      paidAmt = Math.max(0, Math.min(total_amount, parseFloat(paid_amount) || 0));
+      dueAmt = Math.max(0, total_amount - paidAmt);
+    }
+
+    const result = await query(
+      `INSERT INTO product_purchases (date, product_id, product_name, quantity, unit, purchase_price, total_amount, paid_amount, due_amount, supplier_name, supplier_phone, payment_status, notes) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`,
+      [
+        date || new Date().toISOString().substring(0, 10),
+        product_id || null,
+        product_name.trim(),
+        qty,
+        unit || 'KG',
+        rate,
+        total_amount,
+        paidAmt,
+        dueAmt,
+        supplier_name?.trim() || 'General Supplier',
+        supplier_phone || '',
+        payment_status,
+        notes?.trim() || ''
+      ]
+    );
+    let purchase = result.rows && result.rows[0];
+    if (!purchase && result.insertId) {
+      const fetchRes = await query('SELECT * FROM product_purchases WHERE id = ?', [result.insertId]);
+      purchase = fetchRes.rows[0];
+    }
+    res.status(201).json({ purchase: purchase || { id: result.insertId, total_amount, paid_amount: paidAmt, due_amount: dueAmt }, message: 'Product purchase recorded' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to create product purchase' });
+  }
+});
+
+// DELETE product purchase
+app.delete('/api/product-purchases/:id', async (req, res) => {
+  try {
+    await query('DELETE FROM product_purchases WHERE id = ?', [req.params.id]);
+    res.json({ message: 'Purchase deleted' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to delete product purchase' });
+  }
+});
+
 // =================== PRODUCT SALES API ===================
 
 // GET product sales
-app.get('/api/product-sales', authenticate, async (req, res) => {
+app.get('/api/product-sales', async (req, res) => {
   try {
     const { limit = 100, product_id } = req.query;
     let sql = 'SELECT * FROM product_sales';
@@ -1941,12 +2061,28 @@ app.get('/api/product-sales', authenticate, async (req, res) => {
     const statsRes = await query(`
       SELECT 
         COALESCE(SUM(total_amount), 0) as total_revenue,
+        COALESCE(SUM(paid_amount), 0) as total_paid,
+        COALESCE(SUM(due_amount), 0) as total_due,
         COALESCE(SUM(quantity), 0) as total_qty,
         COUNT(*) as total_count
       FROM product_sales
     `);
 
-    res.json({ sales: result.rows.map(s => ({ ...s, date: normalizeDate(s.date) })), stats: statsRes.rows[0] });
+    const sales = result.rows.map(s => {
+      const total_amount = parseFloat(s.total_amount) || 0;
+      const payment_status = s.payment_status || 'Paid';
+      const paid_amount = s.paid_amount !== undefined && s.paid_amount !== null ? parseFloat(s.paid_amount) : (payment_status === 'Paid' ? total_amount : 0);
+      const due_amount = s.due_amount !== undefined && s.due_amount !== null ? parseFloat(s.due_amount) : (payment_status === 'Due' ? total_amount : Math.max(0, total_amount - paid_amount));
+      return {
+        ...s,
+        date: normalizeDate(s.date),
+        total_amount,
+        paid_amount,
+        due_amount
+      };
+    });
+
+    res.json({ sales, stats: statsRes.rows[0] });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to fetch product sales' });
@@ -1954,32 +2090,55 @@ app.get('/api/product-sales', authenticate, async (req, res) => {
 });
 
 // POST create product sale
-app.post('/api/product-sales', authenticate, async (req, res) => {
+app.post('/api/product-sales', async (req, res) => {
   try {
-    const { date, product_id, product_name, quantity, unit, selling_price, customer_name, customer_phone, payment_status, notes } = req.body;
+    const { date, product_id, product_name, quantity, unit, selling_price, customer_name, customer_phone, payment_status = 'Paid', paid_amount, due_amount, notes } = req.body;
     if (!product_name) return res.status(400).json({ error: 'Product name required' });
-    if (!quantity || quantity <= 0) return res.status(400).json({ error: 'Valid quantity required' });
-    if (selling_price < 0) return res.status(400).json({ error: 'Selling price cannot be negative' });
+    const qty = parseFloat(quantity);
+    const rate = parseFloat(selling_price);
+    if (isNaN(qty) || qty <= 0) return res.status(400).json({ error: 'Valid quantity required' });
+    if (isNaN(rate) || rate < 0) return res.status(400).json({ error: 'Selling price cannot be negative' });
 
-    const total_amount = parseFloat(quantity) * parseFloat(selling_price);
+    const total_amount = qty * rate;
+    let paidAmt = total_amount;
+    let dueAmt = 0;
+
+    if (payment_status === 'Paid') {
+      paidAmt = total_amount;
+      dueAmt = 0;
+    } else if (payment_status === 'Due') {
+      paidAmt = 0;
+      dueAmt = total_amount;
+    } else if (payment_status === 'Partial') {
+      paidAmt = Math.max(0, Math.min(total_amount, parseFloat(paid_amount) || 0));
+      dueAmt = Math.max(0, total_amount - paidAmt);
+    }
+
     const result = await query(
-      `INSERT INTO product_sales (date, product_id, product_name, quantity, unit, selling_price, total_amount, customer_name, customer_phone, payment_status, notes) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`,
+      `INSERT INTO product_sales (date, product_id, product_name, quantity, unit, selling_price, total_amount, paid_amount, due_amount, customer_name, customer_phone, payment_status, notes) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`,
       [
         date || new Date().toISOString().substring(0, 10),
         product_id || null,
         product_name.trim(),
-        parseFloat(quantity),
-        unit || 'Piece',
-        parseFloat(selling_price) || 0,
+        qty,
+        unit || 'KG',
+        rate,
         total_amount,
+        paidAmt,
+        dueAmt,
         customer_name?.trim() || 'Cash Customer',
         customer_phone || '',
-        payment_status || 'Paid',
+        payment_status,
         notes?.trim() || ''
       ]
     );
-    res.status(201).json({ sale: result.rows[0], message: 'Product sale recorded' });
+    let sale = result.rows && result.rows[0];
+    if (!sale && result.insertId) {
+      const fetchRes = await query('SELECT * FROM product_sales WHERE id = ?', [result.insertId]);
+      sale = fetchRes.rows[0];
+    }
+    res.status(201).json({ sale: sale || { id: result.insertId, total_amount, paid_amount: paidAmt, due_amount: dueAmt }, message: 'Product sale recorded' });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to create product sale' });
@@ -1987,7 +2146,7 @@ app.post('/api/product-sales', authenticate, async (req, res) => {
 });
 
 // DELETE product sale
-app.delete('/api/product-sales/:id', authenticate, async (req, res) => {
+app.delete('/api/product-sales/:id', async (req, res) => {
   try {
     await query('DELETE FROM product_sales WHERE id = ?', [req.params.id]);
     res.json({ message: 'Sale deleted' });

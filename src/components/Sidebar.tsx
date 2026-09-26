@@ -103,7 +103,7 @@ export const Sidebar: React.FC = () => {
     },
     {
       id: 'products',
-      label: 'পণ্য ক্রয়-বিক্রয় (দই)',
+      label: 'পণ্য ক্রয়-বিক্রয় (Products)',
       icon: <Package className="w-5 h-5 text-purple-600" />,
     },
     {

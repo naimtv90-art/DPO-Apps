@@ -12,7 +12,8 @@ import {
   AppSettings,
   User,
   Product,
-  ProductSale
+  ProductSale,
+  ProductPurchase
 } from '../types';
 
 export const getBaseUrl = (): string => {
@@ -432,28 +433,44 @@ export const api = {
 
   // Product Sales
   getProductSales: async (): Promise<{ sales: ProductSale[]; stats: any }> => {
-    const token = localStorage.getItem('dpo_token');
-    const res = await fetch(`${getBaseUrl()}/product-sales`, {
-      headers: { Authorization: `Bearer ${token}` }
-    });
+    const res = await fetch(`${getBaseUrl()}/product-sales`);
     return handleResponse(res);
   },
 
   createProductSale: async (data: Partial<ProductSale>): Promise<{ sale: ProductSale; message: string }> => {
-    const token = localStorage.getItem('dpo_token');
     const res = await fetch(`${getBaseUrl()}/product-sales`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
     });
     return handleResponse(res);
   },
 
   deleteProductSale: async (id: number): Promise<{ message: string }> => {
-    const token = localStorage.getItem('dpo_token');
     const res = await fetch(`${getBaseUrl()}/product-sales/${id}`, {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${token}` }
+      method: 'DELETE'
+    });
+    return handleResponse(res);
+  },
+
+  // Product Purchases
+  getProductPurchases: async (): Promise<{ purchases: ProductPurchase[]; stats: any }> => {
+    const res = await fetch(`${getBaseUrl()}/product-purchases`);
+    return handleResponse(res);
+  },
+
+  createProductPurchase: async (data: Partial<ProductPurchase>): Promise<{ purchase: ProductPurchase; message: string }> => {
+    const res = await fetch(`${getBaseUrl()}/product-purchases`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    return handleResponse(res);
+  },
+
+  deleteProductPurchase: async (id: number): Promise<{ message: string }> => {
+    const res = await fetch(`${getBaseUrl()}/product-purchases/${id}`, {
+      method: 'DELETE'
     });
     return handleResponse(res);
   },

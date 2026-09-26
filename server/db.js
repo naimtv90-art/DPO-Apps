@@ -59,11 +59,18 @@ export async function query(sql, params = []) {
       insertId: res.rows[0]?.id || null
     };
   } else {
-    const isSelect = /^\s*(SELECT|PRAGMA|WITH)/i.test(sql);
-    if (isSelect) {
-      const stmt = sqliteDb.prepare(sql);
-      const rows = stmt.all(...params);
-      return { rows, rowCount: rows.length };
+    const isReturningOrSelect = /^\s*(SELECT|PRAGMA|WITH)/i.test(sql) || /RETURNING/i.test(sql);
+    if (isReturningOrSelect) {
+      try {
+        const stmt = sqliteDb.prepare(sql);
+        const rows = stmt.all(...params);
+        return { rows, rowCount: rows.length, insertId: rows[0]?.id || null };
+      } catch (err) {
+        const cleanSql = sql.replace(/RETURNING\s+[\w\*,\s]+/i, '');
+        const stmt = sqliteDb.prepare(cleanSql);
+        const info = stmt.run(...params);
+        return { rows: [], rowCount: info.changes, insertId: info.lastInsertRowid };
+      }
     } else {
       const stmt = sqliteDb.prepare(sql);
       const info = stmt.run(...params);
@@ -256,9 +263,11 @@ export async function initDatabase() {
         product_id INTEGER REFERENCES products(id) ON DELETE SET NULL,
         product_name VARCHAR(255) NOT NULL,
         quantity NUMERIC(12, 2) NOT NULL CHECK (quantity > 0),
-        unit VARCHAR(50) DEFAULT 'Piece',
+        unit VARCHAR(50) DEFAULT 'KG',
         selling_price NUMERIC(12, 2) NOT NULL CHECK (selling_price >= 0),
         total_amount NUMERIC(12, 2) NOT NULL,
+        paid_amount NUMERIC(12, 2) DEFAULT 0,
+        due_amount NUMERIC(12, 2) DEFAULT 0,
         customer_name VARCHAR(255) DEFAULT 'Cash Customer',
         customer_phone VARCHAR(50),
         payment_status VARCHAR(50) DEFAULT 'Paid',
@@ -272,9 +281,11 @@ export async function initDatabase() {
         product_id INTEGER REFERENCES products(id) ON DELETE SET NULL,
         product_name VARCHAR(255) NOT NULL,
         quantity NUMERIC(12, 2) NOT NULL CHECK (quantity > 0),
-        unit VARCHAR(50) DEFAULT 'Piece',
+        unit VARCHAR(50) DEFAULT 'KG',
         purchase_price NUMERIC(12, 2) NOT NULL CHECK (purchase_price >= 0),
         total_amount NUMERIC(12, 2) NOT NULL,
+        paid_amount NUMERIC(12, 2) DEFAULT 0,
+        due_amount NUMERIC(12, 2) DEFAULT 0,
         supplier_name VARCHAR(255) DEFAULT 'General Supplier',
         supplier_phone VARCHAR(50),
         payment_status VARCHAR(50) DEFAULT 'Paid',
@@ -419,7 +430,7 @@ export async function initDatabase() {
       CREATE TABLE IF NOT EXISTS products (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,
-        unit TEXT DEFAULT 'Piece',
+        unit TEXT DEFAULT 'KG',
         default_price REAL DEFAULT 0,
         description TEXT,
         is_active INTEGER DEFAULT 1,
@@ -432,9 +443,11 @@ export async function initDatabase() {
         product_id INTEGER REFERENCES products(id) ON DELETE SET NULL,
         product_name TEXT NOT NULL,
         quantity REAL NOT NULL,
-        unit TEXT DEFAULT 'Piece',
+        unit TEXT DEFAULT 'KG',
         selling_price REAL NOT NULL,
         total_amount REAL NOT NULL,
+        paid_amount REAL DEFAULT 0,
+        due_amount REAL DEFAULT 0,
         customer_name TEXT DEFAULT 'Cash Customer',
         customer_phone TEXT,
         payment_status TEXT DEFAULT 'Paid',
@@ -448,9 +461,11 @@ export async function initDatabase() {
         product_id INTEGER REFERENCES products(id) ON DELETE SET NULL,
         product_name TEXT NOT NULL,
         quantity REAL NOT NULL,
-        unit TEXT DEFAULT 'Piece',
+        unit TEXT DEFAULT 'KG',
         purchase_price REAL NOT NULL,
         total_amount REAL NOT NULL,
+        paid_amount REAL DEFAULT 0,
+        due_amount REAL DEFAULT 0,
         supplier_name TEXT DEFAULT 'General Supplier',
         supplier_phone TEXT,
         payment_status TEXT DEFAULT 'Paid',
@@ -469,23 +484,36 @@ export async function initDatabase() {
     `);
   }
 
-  // Auto-migration: Ensure milk_sales has paid_amount and due_amount columns
+  // Auto-migration: Ensure milk_sales, product_sales, product_purchases have paid_amount and due_amount columns
   try {
     if (isPostgres) {
       await query(`ALTER TABLE milk_sales ADD COLUMN IF NOT EXISTS paid_amount NUMERIC(12, 2) DEFAULT 0;`);
       await query(`ALTER TABLE milk_sales ADD COLUMN IF NOT EXISTS due_amount NUMERIC(12, 2) DEFAULT 0;`);
+      await query(`ALTER TABLE product_sales ADD COLUMN IF NOT EXISTS paid_amount NUMERIC(12, 2) DEFAULT 0;`);
+      await query(`ALTER TABLE product_sales ADD COLUMN IF NOT EXISTS due_amount NUMERIC(12, 2) DEFAULT 0;`);
+      await query(`ALTER TABLE product_purchases ADD COLUMN IF NOT EXISTS paid_amount NUMERIC(12, 2) DEFAULT 0;`);
+      await query(`ALTER TABLE product_purchases ADD COLUMN IF NOT EXISTS due_amount NUMERIC(12, 2) DEFAULT 0;`);
     } else {
-      const cols = await query(`PRAGMA table_info(milk_sales)`);
-      const colNames = (cols.rows || []).map(c => c.name);
-      if (!colNames.includes('paid_amount')) {
-        await query(`ALTER TABLE milk_sales ADD COLUMN paid_amount REAL DEFAULT 0`);
-      }
-      if (!colNames.includes('due_amount')) {
-        await query(`ALTER TABLE milk_sales ADD COLUMN due_amount REAL DEFAULT 0`);
-      }
+      // milk_sales
+      const msCols = await query(`PRAGMA table_info(milk_sales)`);
+      const msColNames = (msCols.rows || []).map(c => c.name);
+      if (!msColNames.includes('paid_amount')) await query(`ALTER TABLE milk_sales ADD COLUMN paid_amount REAL DEFAULT 0`);
+      if (!msColNames.includes('due_amount')) await query(`ALTER TABLE milk_sales ADD COLUMN due_amount REAL DEFAULT 0`);
+
+      // product_sales
+      const psCols = await query(`PRAGMA table_info(product_sales)`);
+      const psColNames = (psCols.rows || []).map(c => c.name);
+      if (!psColNames.includes('paid_amount')) await query(`ALTER TABLE product_sales ADD COLUMN paid_amount REAL DEFAULT 0`);
+      if (!psColNames.includes('due_amount')) await query(`ALTER TABLE product_sales ADD COLUMN due_amount REAL DEFAULT 0`);
+
+      // product_purchases
+      const ppCols = await query(`PRAGMA table_info(product_purchases)`);
+      const ppColNames = (ppCols.rows || []).map(c => c.name);
+      if (!ppColNames.includes('paid_amount')) await query(`ALTER TABLE product_purchases ADD COLUMN paid_amount REAL DEFAULT 0`);
+      if (!ppColNames.includes('due_amount')) await query(`ALTER TABLE product_purchases ADD COLUMN due_amount REAL DEFAULT 0`);
     }
   } catch (migErr) {
-    console.warn('Migration note for milk_sales paid/due amounts:', migErr.message);
+    console.warn('Migration note for paid/due amounts:', migErr.message);
   }
 
   // Seed default admin user

@@ -134,6 +134,48 @@ CREATE TABLE IF NOT EXISTS product_waste (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS products (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(255) NOT NULL,
+  unit VARCHAR(50) DEFAULT 'KG',
+  default_price NUMERIC(12, 2) DEFAULT 0,
+  description TEXT,
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS product_sales (
+  id SERIAL PRIMARY KEY,
+  date DATE NOT NULL,
+  product_id INTEGER REFERENCES products(id) ON DELETE SET NULL,
+  product_name VARCHAR(255) NOT NULL,
+  quantity NUMERIC(12, 2) NOT NULL CHECK (quantity > 0),
+  unit VARCHAR(50) DEFAULT 'KG',
+  selling_price NUMERIC(12, 2) NOT NULL CHECK (selling_price >= 0),
+  total_amount NUMERIC(12, 2) NOT NULL,
+  customer_name VARCHAR(255) DEFAULT 'Cash Customer',
+  customer_phone VARCHAR(50),
+  payment_status VARCHAR(50) DEFAULT 'Paid',
+  notes TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS product_purchases (
+  id SERIAL PRIMARY KEY,
+  date DATE NOT NULL,
+  product_id INTEGER REFERENCES products(id) ON DELETE SET NULL,
+  product_name VARCHAR(255) NOT NULL,
+  quantity NUMERIC(12, 2) NOT NULL CHECK (quantity > 0),
+  unit VARCHAR(50) DEFAULT 'KG',
+  purchase_price NUMERIC(12, 2) NOT NULL CHECK (purchase_price >= 0),
+  total_amount NUMERIC(12, 2) NOT NULL,
+  supplier_name VARCHAR(255) DEFAULT 'General Supplier',
+  supplier_phone VARCHAR(50),
+  payment_status VARCHAR(50) DEFAULT 'Paid',
+  notes TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Performance Indexes
 CREATE INDEX IF NOT EXISTS idx_purchases_date ON milk_purchases(date DESC);
 CREATE INDEX IF NOT EXISTS idx_sales_date ON milk_sales(date DESC);
@@ -144,4 +186,6 @@ CREATE INDEX IF NOT EXISTS idx_sales_customer ON milk_sales(customer_id);
 CREATE INDEX IF NOT EXISTS idx_investments_date ON partner_investments(date DESC);
 CREATE INDEX IF NOT EXISTS idx_investments_partner ON partner_investments(partner_name);
 CREATE INDEX IF NOT EXISTS idx_waste_date ON product_waste(date DESC);
+CREATE INDEX IF NOT EXISTS idx_product_sales_date ON product_sales(date DESC);
+CREATE INDEX IF NOT EXISTS idx_product_purchases_date ON product_purchases(date DESC);
 
